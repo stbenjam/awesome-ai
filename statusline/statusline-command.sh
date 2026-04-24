@@ -4,8 +4,8 @@ input=$(cat)
 
 model=$(echo "$input" | jq -r '.model.display_name')
 cwd=$(echo "$input" | jq -r '.workspace.current_dir')
-used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
-cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
+used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
+cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty')
 lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
 lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // 0')
@@ -69,54 +69,47 @@ printf '%b\n' "${model_str}${git_str}${dir_str}"
 
 # ── Line 2: Context bar / Cost / Duration / Lines ──
 
-if [ -n "$used_pct" ]; then
-    used_int=$(printf "%.0f" "$used_pct")
-    bar_width=20
-    filled=$((used_int * bar_width / 100))
-    empty=$((bar_width - filled))
+used_int=$(printf "%.0f" "$used_pct")
+bar_width=20
+filled=$((used_int * bar_width / 100))
+empty=$((bar_width - filled))
 
-    # Color gradient + emoji based on usage
-    if [ "$used_int" -lt 50 ]; then
-        BAR_COLOR="$TEAL"
-        PCT_COLOR="$GREEN"
-        ctx_icon="🧠"
-    elif [ "$used_int" -lt 75 ]; then
-        BAR_COLOR="$YELLOW"
-        PCT_COLOR="$YELLOW"
-        ctx_icon="🧠"
-    elif [ "$used_int" -lt 85 ]; then
-        BAR_COLOR="$ORANGE"
-        PCT_COLOR="$ORANGE"
-        ctx_icon="🔥"
-    elif [ "$used_int" -lt 95 ]; then
-        BAR_COLOR="$RED"
-        PCT_COLOR="$RED"
-        ctx_icon="⚠️"
-        warning="${SEP}${RED}${BOLD}⚠️  COMPACT SOON${RST}"
-    else
-        BAR_COLOR="$RED"
-        PCT_COLOR="$RED"
-        ctx_icon="🚨"
-        warning="${SEP}${RED}${BOLD}${BLINK}🚨 COMPACTING${RST}"
-    fi
-
-    bar="${BAR_COLOR}"
-    for ((i=0; i<filled; i++)); do bar="${bar}█"; done
-    bar="${bar}${RST}${GRAY}"
-    for ((i=0; i<empty; i++)); do bar="${bar}░"; done
-    bar="${bar}${RST}"
-
-    ctx_str="${ctx_icon} ${GRAY}▐${RST}${bar}${GRAY}▌${RST} ${PCT_COLOR}${BOLD}${used_int}%${RST}${warning}"
+# Color gradient + emoji based on usage
+if [ "$used_int" -lt 50 ]; then
+    BAR_COLOR="$TEAL"
+    PCT_COLOR="$GREEN"
+    ctx_icon="🧠"
+elif [ "$used_int" -lt 75 ]; then
+    BAR_COLOR="$YELLOW"
+    PCT_COLOR="$YELLOW"
+    ctx_icon="🧠"
+elif [ "$used_int" -lt 85 ]; then
+    BAR_COLOR="$ORANGE"
+    PCT_COLOR="$ORANGE"
+    ctx_icon="🔥"
+elif [ "$used_int" -lt 95 ]; then
+    BAR_COLOR="$RED"
+    PCT_COLOR="$RED"
+    ctx_icon="⚠️"
+    warning="${SEP}${RED}${BOLD}⚠️  COMPACT SOON${RST}"
 else
-    ctx_str=""
+    BAR_COLOR="$RED"
+    PCT_COLOR="$RED"
+    ctx_icon="🚨"
+    warning="${SEP}${RED}${BOLD}${BLINK}🚨 COMPACTING${RST}"
 fi
+
+bar="${BAR_COLOR}"
+for ((i=0; i<filled; i++)); do bar="${bar}█"; done
+bar="${bar}${RST}${GRAY}"
+for ((i=0; i<empty; i++)); do bar="${bar}░"; done
+bar="${bar}${RST}"
+
+ctx_str="${ctx_icon} ${GRAY}▐${RST}${bar}${GRAY}▌${RST} ${PCT_COLOR}${BOLD}${used_int}%${RST}${warning}"
 
 # Cost
-cost_str=""
-if [ -n "$cost" ] && [ "$cost" != "0" ]; then
-    cost_fmt=$(printf '$%.2f' "$cost")
-    cost_str="${SEP}${GREEN}💰 ${cost_fmt}${RST}"
-fi
+cost_fmt=$(printf '$%.2f' "${cost:-0}")
+cost_str="${SEP}${GREEN}💰 ${cost_fmt}${RST}"
 
 # Duration
 dur_str=""
