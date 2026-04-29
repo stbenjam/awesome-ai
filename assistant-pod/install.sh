@@ -58,6 +58,12 @@ _assistant_pod_run() {
   # opencode config
   [[ -d "$HOME/.config/opencode" ]] && args+=(-v "$HOME/.config/opencode:/home/user/.config/opencode:rw")
 
+  # GitHub CLI config
+  [[ -d "$HOME/.config/gh" ]] && args+=(-v "$HOME/.config/gh:/home/user/.config/gh:rw")
+
+  # Git identity
+  [[ -f "$HOME/.gitconfig" ]] && args+=(-v "$HOME/.gitconfig:/home/user/.gitconfig:ro")
+
   # Vertex AI / Google Cloud — mount gcloud config and pass env vars when opted in
   if [[ "${GOOGLE_GENAI_USE_VERTEXAI:-}" == "true" || -n "${CLAUDE_CODE_USE_VERTEX:-}" ]]; then
     if [[ -d "$HOME/.config/gcloud" ]]; then

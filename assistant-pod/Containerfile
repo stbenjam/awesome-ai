@@ -8,6 +8,7 @@ RUN dnf install -y \
     gcc gcc-c++ make cmake \
     rust cargo \
     java-latest-openjdk-devel maven \
+    gh \
     jq ripgrep fd-find \
     diffutils patch unzip procps-ng \
     && dnf clean all
