@@ -26,22 +26,18 @@ else
   "${CONTAINER_RT}" tag "${GHCR_IMAGE}" "${IMAGE_NAME}"
 fi
 
-MARKER="# --- assistant-pod aliases ---"
+BEGIN_MARKER="# --- assistant-pod aliases ---"
+END_MARKER="# --- end assistant-pod aliases ---"
 
-if grep -qF "${MARKER}" "${SHELL_RC}" 2>/dev/null; then
-  echo "Aliases already present in ${SHELL_RC}, skipping."
-else
-  echo "Adding aliases to ${SHELL_RC}..."
-  cat >> "${SHELL_RC}" << 'ALIASES'
-
+ALIAS_BLOCK="$(cat << 'ALIASES'
 # --- assistant-pod aliases ---
 _assistant_pod_run() {
   local tool="$1"; shift
   local -a args=(
     run -it --rm
     --userns=keep-id
-    -v "$PWD:/workspace:rw"
-    -w /workspace
+    -v "$PWD:/workspace/$(basename "$PWD"):rw"
+    -w "/workspace/$(basename "$PWD")"
   )
 
   # Claude config dir
@@ -60,6 +56,34 @@ _assistant_pod_run() {
 
   # GitHub CLI config
   [[ -d "$HOME/.config/gh" ]] && args+=(-v "$HOME/.config/gh:/home/user/.config/gh:rw")
+
+  # GitHub CLI token — gh often stores tokens in the OS keyring, which isn't
+  # available inside the container. Forward an explicit token when possible.
+  if [[ -z "${GH_TOKEN:-}" ]]; then
+    GH_TOKEN="$(gh auth token 2>/dev/null || true)"
+  fi
+  [[ -n "${GH_TOKEN:-}" ]] && args+=(-e "GH_TOKEN=${GH_TOKEN}")
+
+  # SSH agent forwarding (opt-in: export ASSISTANT_POD_SSH_AGENT=1)
+  if [[ "${ASSISTANT_POD_SSH_AGENT:-}" == "1" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      if [[ "${CONTAINER_RT}" == "docker" ]]; then
+        args+=(-v "/run/host-services/ssh-auth.sock:/run/ssh-agent.sock")
+        args+=(-e "SSH_AUTH_SOCK=/run/ssh-agent.sock")
+      else
+        echo "Warning: SSH agent forwarding is not supported with Podman on macOS." >&2
+        echo "See: https://github.com/containers/podman/issues/23785" >&2
+      fi
+    elif [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
+      args+=(-v "${SSH_AUTH_SOCK}:/run/ssh-agent.sock")
+      args+=(-e "SSH_AUTH_SOCK=/run/ssh-agent.sock")
+    fi
+  fi
+
+  # SSH keys (opt-in: export ASSISTANT_POD_SSH_KEYS=1)
+  if [[ "${ASSISTANT_POD_SSH_KEYS:-}" == "1" && -d "$HOME/.ssh" ]]; then
+    args+=(-v "$HOME/.ssh:/home/user/.ssh:ro")
+  fi
 
   # Git identity
   [[ -f "$HOME/.gitconfig" ]] && args+=(-v "$HOME/.gitconfig:/home/user/.gitconfig:ro")
@@ -86,6 +110,27 @@ codex()    { _assistant_pod_run codex "$@"; }
 opencode() { _assistant_pod_run opencode "$@"; }
 # --- end assistant-pod aliases ---
 ALIASES
+)"
+
+if grep -qF "${BEGIN_MARKER}" "${SHELL_RC}" 2>/dev/null; then
+  echo "Updating aliases in ${SHELL_RC}..."
+  cp "${SHELL_RC}" "${SHELL_RC}.bak"
+  echo "Backed up ${SHELL_RC} to ${SHELL_RC}.bak"
+  tmpfile="$(mktemp)"
+  printf '%s\n' "${ALIAS_BLOCK}" > "${tmpfile}"
+  awk -v blockfile="${tmpfile}" '
+    /^# --- assistant-pod aliases ---/ {
+      while ((getline line < blockfile) > 0) print line
+      close(blockfile)
+      skip = 1
+      next
+    }
+    /^# --- end assistant-pod aliases ---/ { skip = 0; next }
+    !skip' "${SHELL_RC}" > "${SHELL_RC}.tmp" && mv "${SHELL_RC}.tmp" "${SHELL_RC}"
+  rm -f "${tmpfile}"
+else
+  echo "Adding aliases to ${SHELL_RC}..."
+  printf '\n%s\n' "${ALIAS_BLOCK}" >> "${SHELL_RC}"
 fi
 
 echo "Done. Restart your shell or run: source ${SHELL_RC}"

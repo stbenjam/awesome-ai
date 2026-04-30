@@ -1,0 +1,10 @@
+name: stbenjam
+version: 1.0.0
+description: Skills, rules, hooks, commands and more that stbenjam uses for development.
+target: [claude, cursor, gemini, opencode]
+
+dependencies: {}
+  # External dependencies can be pulled from GitHub, e.g.:
+  # apm:
+  #   - openshift-eng/ai-helpers/plugins/bigquery
+  #
