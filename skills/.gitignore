@@ -1,0 +1,7 @@
+apm.lock.yaml
+.claude/
+.cursor/
+.gemini/
+.opencode/
+# APM dependencies
+apm_modules/

@@ -18,3 +18,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+
+# APM dependencies
+apm_modules/
