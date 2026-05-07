@@ -9,6 +9,8 @@ chmod +x "$CLAUDE_DIR/statusline-command.sh"
 
 cp "$SCRIPT_DIR/slogans.txt" "$CLAUDE_DIR/slogans.txt"
 
+cp "$SCRIPT_DIR/compute-daily-cost.py" "$CLAUDE_DIR/compute-daily-cost.py"
+
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
 if [ ! -f "$SETTINGS_FILE" ]; then

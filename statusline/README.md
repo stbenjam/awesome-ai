@@ -4,7 +4,7 @@ A colorful, information-dense status line for Claude Code that shows:
 
 **Line 1** - Model, git branch (with dirty/staged indicators), and current directory
 
-**Line 2** - Context window usage bar with color-coded warnings, session cost, duration, and lines changed
+**Line 2** - Context window usage bar with color-coded warnings, session cost, daily cost across all sessions, duration, and lines changed
 
 **Line 3** - Random inspirational slogan from a curated list of 381 messages
 
@@ -12,13 +12,14 @@ A colorful, information-dense status line for Claude Code that shows:
 
 ```
 ✨ Claude Opus 4.6 │ 🌿 main● │ 📂 ~/projects/myapp
-🧠 ▐████████░░░░░░░░░░░░▌ 40% │ 💰 $1.23 │ ⏱️  12m │ 📝 +45 -12
+🧠 ▐████████░░░░░░░░░░░░▌ 40% │ 💰 $1.23 session │ 📅 $4.56 today │ ⏱️  12m │ 📝 +45 -12
 💫 Ship it and sleep well
 ```
 
 ## Requirements
 
 - `jq` (for parsing JSON input and configuring settings)
+- `python3` (for daily cost tracking across sessions)
 - A terminal with 256-color support
 
 ## Install
