@@ -10,9 +10,8 @@ The script:
      dated today (including subagent JSONL files).
   2. For the CURRENT session it uses <current_session_cost_usd> directly
      (the value from cost.total_cost_usd in the statusline JSON is exact).
-  3. For ALL OTHER sessions it derives an effective per-token price from the
-     current session's own JSONL token counts vs its known cost, then applies
-     that price to every other session.
+  3. For ALL OTHER sessions it estimates cost using fixed per-token pricing
+     calibrated for Sonnet 4.x.
   4. Results are cached in ~/.claude/daily-cost-cache.json for 90 seconds.
      The cache is invalidated when the date rolls over or when the set of
      JSONL files changes (tracked via a fingerprint of paths + mtimes).
