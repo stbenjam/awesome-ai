@@ -25,7 +25,7 @@ import json
 import glob
 import hashlib
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 # ---------------------------------------------------------------------------
 # Config
