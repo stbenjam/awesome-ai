@@ -73,13 +73,14 @@ def is_today(ts_str: str, today: str) -> bool:
     return False
 
 
-def collect_jsonl_files() -> list:
-    """Return sorted list of all project JSONL files (sessions + subagents)."""
-    pattern_sessions = os.path.join(CLAUDE_DIR, "projects", "**", "*.jsonl")
-    pattern_subagents = os.path.join(CLAUDE_DIR, "projects", "**", "subagents", "*.jsonl")
-    files = glob.glob(pattern_sessions, recursive=True) + glob.glob(pattern_subagents, recursive=True)
-    # Deduplicate (glob patterns may overlap) and sort for stability
-    return sorted(set(files))
+def collect_jsonl_files(today_only: bool = False) -> list:
+    """Return sorted list of all project JSONL files modified today (or ever)."""
+    pattern = os.path.join(CLAUDE_DIR, "projects", "**", "*.jsonl")
+    files = glob.glob(pattern, recursive=True)
+    if today_only:
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        files = [f for f in files if os.path.getmtime(f) >= today_start]
+    return sorted(files)
 
 
 def fingerprint_files(files: list) -> str:
@@ -193,8 +194,8 @@ def aggregate_tokens_from_files(files: list, today: str) -> dict:
 def compute_daily_cost(current_session_id: str, current_session_cost: float) -> float:
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # --- Collect JSONL files ---
-    all_files = collect_jsonl_files()
+    # --- Collect JSONL files modified today ---
+    all_files = collect_jsonl_files(today_only=True)
     fp = fingerprint_files(all_files)
 
     # --- Fast path: cache still fresh ---
