@@ -70,15 +70,7 @@ def is_today(ts_str: str, today: str) -> bool:
     # Fast path: string starts with the date we want
     if ts_str.startswith(today):
         return True
-    # Try parsing as ISO datetime and converting to local date
-    try:
-        # Strip trailing Z / offset for simple parsing
-        clean = ts_str.rstrip("Z").split("+")[0].split("-")[0:3]
-        # Reconstitute just the date portion
-        date_part = ts_str[:10]
-        return date_part == today
-    except Exception:
-        return False
+    return False
 
 
 def collect_jsonl_files() -> list:
