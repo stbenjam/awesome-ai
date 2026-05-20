@@ -29,7 +29,7 @@ fi
 BEGIN_MARKER="# --- assistant-pod aliases ---"
 END_MARKER="# --- end assistant-pod aliases ---"
 
-ALIAS_BLOCK="$(cat << 'ALIASES'
+IFS= read -r -d '' ALIAS_BLOCK << 'ALIASES' || true
 # --- assistant-pod aliases ---
 _assistant_pod_run() {
   local tool="$1"; shift
@@ -110,7 +110,6 @@ codex()    { _assistant_pod_run codex "$@"; }
 opencode() { _assistant_pod_run opencode "$@"; }
 # --- end assistant-pod aliases ---
 ALIASES
-)"
 
 if grep -qF "${BEGIN_MARKER}" "${SHELL_RC}" 2>/dev/null; then
   echo "Updating aliases in ${SHELL_RC}..."
