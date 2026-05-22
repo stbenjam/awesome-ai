@@ -5,13 +5,21 @@ input=$(cat)
 model=$(echo "$input" | jq -r '.model.display_name')
 cwd=$(echo "$input" | jq -r '.workspace.current_dir')
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
+ctx_input=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
+ctx_output=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
+ctx_window=$(echo "$input" | jq -r '.context_window.context_window_size // 0')
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty')
 lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
 lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // 0')
 
 # Shorten home prefix to ~
-display_dir="${cwd/#$HOME/~}"
+home_dir="${HOME:-$(eval echo ~)}"
+if [[ "$cwd" == "$home_dir"* ]]; then
+    display_dir="~${cwd#"$home_dir"}"
+else
+    display_dir="$cwd"
+fi
 
 # Colors — 256-color palette for vibrancy
 RST='\033[0m'
@@ -41,6 +49,10 @@ SEP="${DIM}${PURPLE} │ ${RST}"
 
 model_str="${HOTPINK}${BOLD}✨${RST} ${CYAN}${BOLD}${model}${RST}"
 
+# Current user
+current_user="${USER:-$(whoami 2>/dev/null)}"
+user_str="${SEP}${PINK}👤 ${WHITE}${current_user}${RST}"
+
 # Git info
 git_str=""
 if cd "$cwd" 2>/dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
@@ -65,45 +77,87 @@ fi
 # Directory — full path with ~ for home
 dir_str="${SEP}${BLUE}📂 ${display_dir}${RST}"
 
-printf '%b\n' "${model_str}${git_str}${dir_str}"
+printf '%b\n' "${model_str}${user_str}${git_str}${dir_str}"
 
 # ── Line 2: Context bar / Cost / Duration / Lines ──
 
 used_int=$(printf "%.0f" "$used_pct")
+
+# Format token count as human-readable (e.g. 104k, 1.0M)
+fmt_tokens() {
+    local n=$1
+    if [ "$n" -ge 1000000 ]; then
+        awk -v n="$n" 'BEGIN { printf "%.1fM", n/1000000 }'
+    elif [ "$n" -ge 1000 ]; then
+        awk -v n="$n" 'BEGIN { printf "%.0fk", n/1000 }'
+    else
+        printf '%s' "$n"
+    fi
+}
+
+ctx_used=$((ctx_input + ctx_output))
+ctx_used_fmt=$(fmt_tokens "$ctx_used")
+ctx_window_fmt=$(fmt_tokens "$ctx_window")
+
 bar_width=20
 filled=$((used_int * bar_width / 100))
 empty=$((bar_width - filled))
 
+# Background color codes (matching foreground palette)
+BG_TEAL='\033[48;5;43m'
+BG_YELLOW='\033[48;5;221m'
+BG_ORANGE='\033[48;5;209m'
+BG_RED='\033[48;5;197m'
+BLACK='\033[38;5;16m'
+ROSE='\033[38;5;225m'
+BG_GRAY='\033[48;5;239m'
+
 # Color gradient + emoji based on usage
 if [ "$used_int" -lt 50 ]; then
-    BAR_COLOR="$TEAL"
+    BAR_COLOR="$TEAL";  BAR_BG="$BG_TEAL";  BAR_TEXT="$BLACK"
     PCT_COLOR="$GREEN"
     ctx_icon="🧠"
 elif [ "$used_int" -lt 75 ]; then
-    BAR_COLOR="$YELLOW"
+    BAR_COLOR="$YELLOW"; BAR_BG="$BG_YELLOW"; BAR_TEXT="$BLACK"
     PCT_COLOR="$YELLOW"
     ctx_icon="🧠"
 elif [ "$used_int" -lt 85 ]; then
-    BAR_COLOR="$ORANGE"
+    BAR_COLOR="$ORANGE"; BAR_BG="$BG_ORANGE"; BAR_TEXT="$BLACK"
     PCT_COLOR="$ORANGE"
     ctx_icon="🔥"
 elif [ "$used_int" -lt 95 ]; then
-    BAR_COLOR="$RED"
+    BAR_COLOR="$RED"; BAR_BG="$BG_RED"; BAR_TEXT="$ROSE"
     PCT_COLOR="$RED"
     ctx_icon="⚠️"
     warning="${SEP}${RED}${BOLD}⚠️  COMPACT SOON${RST}"
 else
-    BAR_COLOR="$RED"
+    BAR_COLOR="$RED"; BAR_BG="$BG_RED"; BAR_TEXT="$ROSE"
     PCT_COLOR="$RED"
     ctx_icon="🚨"
     warning="${SEP}${RED}${BOLD}${BLINK}🚨 COMPACTING${RST}"
 fi
 
-bar="${BAR_COLOR}"
-for ((i=0; i<filled; i++)); do bar="${bar}█"; done
-bar="${bar}${RST}${GRAY}"
-for ((i=0; i<empty; i++)); do bar="${bar}░"; done
-bar="${bar}${RST}"
+label="${ctx_used_fmt}/${ctx_window_fmt}"
+label_len=${#label}
+pad_left=$(( (bar_width - label_len) / 2 ))
+
+bar=""
+for ((i=0; i<bar_width; i++)); do
+    if [ $i -ge $pad_left ] && [ $((i - pad_left)) -lt $label_len ]; then
+        char="${label:$((i - pad_left)):1}"
+        if [ $i -lt $filled ]; then
+            bar="${bar}${BAR_BG}${BAR_TEXT}${BOLD}${char}${RST}"
+        else
+            bar="${bar}${BG_GRAY}${WHITE}${BOLD}${char}${RST}"
+        fi
+    else
+        if [ $i -lt $filled ]; then
+            bar="${bar}${BAR_COLOR}█${RST}"
+        else
+            bar="${bar}${GRAY}░${RST}"
+        fi
+    fi
+done
 
 ctx_str="${ctx_icon} ${GRAY}▐${RST}${bar}${GRAY}▌${RST} ${PCT_COLOR}${BOLD}${used_int}%${RST}${warning}"
 
