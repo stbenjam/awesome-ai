@@ -1125,6 +1125,262 @@ cpu.max = max 100000</code></pre>
         </div>
       </div>
 
+      <!-- More diff lines for force_build -->
+      <table class="diff-table">
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">897</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">898</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+        if not self._use_prebuilt:</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">899</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+            lock = self._image_build_locks.setdefault(</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">900</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+                self.environment_name, asyncio.Lock()</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">901</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+            )</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">902</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+            async with lock:</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">903</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+                await self._run_podman_compose_command(["build"])</td>
+        </tr>
+      </table>
+
+      <!-- Annotation: Finding 3 -->
+      <div class="annotation bug" id="f3">
+        <div class="annotation-header">
+          <span class="severity-tag bug">Bug</span>
+          <span class="annotation-title"><code>force_build=True</code> broken for docker_image-only tasks</span>
+          <span class="annotation-reviewer">bugs, correctness</span>
+        </div>
+        <div class="annotation-body">
+          <p>
+            The check <code>not force_build and self.task_env_config.docker_image</code> doesn't handle
+            the case where <code>force_build=True</code> but no Dockerfile exists. Docker uses
+            <code>should_use_prebuilt_docker_image()</code> which checks for Dockerfile presence and
+            correctly falls back to the prebuilt image when there's nothing to build.
+          </p>
+          <div class="annotation-fix">
+            <strong>Fix:</strong> Replace inline check with
+            <code>should_use_prebuilt_docker_image(self.environment_dir, docker_image=..., force_build=force_build)</code>.
+          </div>
+
+          <details class="reproducer">
+            <summary>▶ Reproducer (verified)</summary>
+            <div class="reproducer-content">
+              <h4>Task config</h4>
+              <pre><code>[environment]
+docker_image = "alpine:latest"
+# No Dockerfile in environment/</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Steps</h4>
+              <pre><code>uv run harbor run -p /tmp/reproducer-force-build \
+  -e podman --agent oracle --force-build --delete --yes</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Expected</h4>
+              <p>Uses prebuilt <code>alpine:latest</code> (nothing to build), reward 1.0.</p>
+
+              <h4>Actual</h4>
+              <pre><code>RuntimeError: Podman compose command failed for environment
+  reproducer-force-build.
+  Command: podman-compose ... build. Return code: 1.
+  OSError: Dockerfile not found in
+  /tmp/reproducer-force-build/environment</code></pre>
+            </div>
+          </details>
+        </div>
+        <div class="feedback-controls">
+          <button class="feedback-btn agree" data-finding="f3" onclick="setVerdict(this, 'agree')">👍 Agree</button>
+          <button class="feedback-btn disagree" data-finding="f3" onclick="setVerdict(this, 'disagree')">👎 Disagree</button>
+          <button class="feedback-btn revise" data-finding="f3" onclick="setVerdict(this, 'revise')">✏️ Needs revision</button>
+          <select class="feedback-severity-select" data-finding="f3" onchange="setSeverity(this)">
+            <option value="" disabled selected>Reclassify…</option>
+            <option value="bug">Bug</option>
+            <option value="potential">Potential</option>
+            <option value="style">Style</option>
+            <option value="info">Info</option>
+          </select>
+          <textarea class="feedback-note" data-finding="f3" rows="1"
+            placeholder="Add a note…"
+            oninput="saveNote(this)"></textarea>
+        </div>
+      </div>
+
+      <!-- More diff lines for env dir upload -->
+      <table class="diff-table">
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">929</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+        self._active_main_container_id = main_container_id</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">930</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+        if not self._is_windows_container:</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">931</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+            await self.ensure_dirs(self._mount_targets(writable_only=True))</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">932</td>
+          <td class="diff-marker">
+            <div class="dot" style="background: var(--red)"></div>
+          </td>
+          <td class="diff-line diff-line-add">+</td>
+        </tr>
+      </table>
+
+      <!-- Annotation: Finding 4 -->
+      <div class="annotation bug" id="f4">
+        <div class="annotation-header">
+          <span class="severity-tag bug">Bug</span>
+          <span class="annotation-title">Missing <code>_upload_environment_dir_after_start</code> call</span>
+          <span class="annotation-reviewer">bugs, correctness</span>
+        </div>
+        <div class="annotation-body">
+          <p>
+            For prebuilt-image tasks with files in <code>environment/</code> but no Dockerfile or
+            compose file, Docker calls <code>_upload_environment_dir_after_start()</code> at
+            <code>docker.py:627</code> to copy those assets into the container workdir. Podman's
+            <code>start()</code> returns here without that call, so those files are silently absent.
+          </p>
+          <div class="annotation-fix">
+            <strong>Fix:</strong> Add <code>await self._upload_environment_dir_after_start()</code>
+            after <code>ensure_dirs</code>.
+          </div>
+
+          <details class="reproducer">
+            <summary>▶ Reproducer (verified)</summary>
+            <div class="reproducer-content">
+              <h4>Task config</h4>
+              <pre><code>[environment]
+docker_image = "ubuntu:24.04"
+# No Dockerfile. environment/marker.txt contains test data.</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Steps</h4>
+              <pre><code>uv run harbor run -p /tmp/reproducer-env-upload \
+  -e podman --agent oracle --delete --yes</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Expected</h4>
+              <p><code>marker.txt</code> uploaded into container workdir, reward 1.0.</p>
+
+              <h4>Actual</h4>
+              <pre><code>FAIL: marker.txt NOT found in container
+Reward: 0.0
+
+# With fix applied (adding the missing call):
+PASS: marker.txt found in container
+Reward: 1.0</code></pre>
+            </div>
+          </details>
+        </div>
+        <div class="feedback-controls">
+          <button class="feedback-btn agree" data-finding="f4" onclick="setVerdict(this, 'agree')">👍 Agree</button>
+          <button class="feedback-btn disagree" data-finding="f4" onclick="setVerdict(this, 'disagree')">👎 Disagree</button>
+          <button class="feedback-btn revise" data-finding="f4" onclick="setVerdict(this, 'revise')">✏️ Needs revision</button>
+          <select class="feedback-severity-select" data-finding="f4" onchange="setSeverity(this)">
+            <option value="" disabled selected>Reclassify…</option>
+            <option value="bug">Bug</option>
+            <option value="potential">Potential</option>
+            <option value="style">Style</option>
+            <option value="info">Info</option>
+          </select>
+          <textarea class="feedback-note" data-finding="f4" rows="1"
+            placeholder="Add a note…"
+            oninput="saveNote(this)"></textarea>
+        </div>
+      </div>
+
+      <!-- More diff lines for stop() -->
+      <table class="diff-table">
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">933</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+    @override</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">934</td>
+          <td class="diff-marker">
+            <div class="dot" style="background: var(--blue)"></div>
+          </td>
+          <td class="diff-line diff-line-add">+    async def stop(self, delete: bool):</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">935</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+        await self.prepare_logs_for_host()</td>
+        </tr>
+      </table>
+
+      <!-- Annotation: Finding 5 (minor) -->
+      <div class="annotation style" id="f5">
+        <div class="annotation-header">
+          <span class="severity-tag style">Style</span>
+          <span class="annotation-title">No temp file cleanup in <code>stop()</code></span>
+          <span class="annotation-reviewer">coderabbit</span>
+        </div>
+        <div class="annotation-body">
+          <p>
+            Docker's <code>stop()</code> calls <code>_cleanup_mounts_compose_file()</code> and
+            <code>_cleanup_resources_compose_file()</code> in a <code>finally</code> block
+            (<code>docker.py:674-675</code>). Podman's <code>stop()</code> doesn't clean up these
+            temp dirs, so they leak until process exit.
+          </p>
+          <div class="annotation-fix">
+            <strong>Suggestion:</strong> Add cleanup calls in a <code>finally</code> block matching Docker's pattern.
+          </div>
+        </div>
+        <div class="feedback-controls">
+          <button class="feedback-btn agree" data-finding="f5" onclick="setVerdict(this, 'agree')">👍 Agree</button>
+          <button class="feedback-btn disagree" data-finding="f5" onclick="setVerdict(this, 'disagree')">👎 Disagree</button>
+          <button class="feedback-btn revise" data-finding="f5" onclick="setVerdict(this, 'revise')">✏️ Needs revision</button>
+          <select class="feedback-severity-select" data-finding="f5" onchange="setSeverity(this)">
+            <option value="" disabled selected>Reclassify…</option>
+            <option value="bug">Bug</option>
+            <option value="potential">Potential</option>
+            <option value="style">Style</option>
+            <option value="info">Info</option>
+          </select>
+          <textarea class="feedback-note" data-finding="f5" rows="1"
+            placeholder="Add a note…"
+            oninput="saveNote(this)"></textarea>
+        </div>
+      </div>
+
     </div>
   </section>
 
