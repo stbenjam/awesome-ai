@@ -1,16 +1,18 @@
 ---
 name: "deep-review"
-description: "Multi-agent panel code review with forced runtime reproducers for all bug findings. Checks out the PR locally, dispatches parallel reviewers, verifies bugs, and creates a PENDING review with inline comments — won't submit until you approve."
+description: "Multi-agent panel code review with forced runtime reproducers for all bug findings. Produces an interactive HTML report walking through changes and findings. Optionally posts to GitHub/GitLab as a PENDING review."
 argument-hint: "[-supply-chain,-codex,...] [pr-url]"
 ---
 
 # Deep Review — Multi-Agent Panel Review with Reproducers
 
-Check out a PR locally, understand the changes, dispatch parallel
-subagent reviewers (each with a different focus), verify every bug
-with a runtime reproducer, then post results as a GitHub/GitLab
-PENDING review with inline comments. Nothing is submitted until the
-user approves.
+Review a branch's changes with parallel subagent reviewers, each
+with a different focus. Verify every bug with a runtime reproducer.
+Produce an interactive HTML report that walks through the changes
+and findings. Optionally post to GitHub/GitLab as a PENDING review.
+
+No PR/MR is required — the review works on any branch with commits
+ahead of its base.
 
 ## Arguments
 
@@ -22,15 +24,15 @@ All reviewer types are enabled by default. Use `-` prefix to exclude:
 
 | Argument | Description |
 |----------|-------------|
-| modifiers | Comma-separated. Prefix with `-` to exclude a default reviewer (e.g., `-supply-chain,-codex`). Bare names are no-ops since all are already enabled |
-| pr-url | GitHub or GitLab PR/MR URL. Omit to infer from current branch |
+| modifiers | Comma-separated. Prefix with `-` to exclude a default reviewer (e.g., `-supply-chain,-codex`) |
+| pr-url | GitHub or GitLab PR/MR URL. Optional — enables posting review comments to the PR |
 
 Examples:
 
-- `/deep-review` — all reviewers, infer PR from current branch
+- `/deep-review` — all reviewers, review current branch
 - `/deep-review -codex` — skip the codex CLI reviewer
-- `/deep-review -supply-chain,-architecture https://github.com/org/repo/pull/42`
-- `/deep-review https://gitlab.com/org/repo/-/merge_requests/7` — GitLab MR
+- `/deep-review -supply-chain https://github.com/org/repo/pull/42`
+- `/deep-review https://gitlab.com/org/repo/-/merge_requests/7`
 
 ### Default Reviewer Types
 
@@ -56,77 +58,41 @@ Parse the argument string:
 - Tokens starting with `-` followed by a reviewer name exclude
   that reviewer from the default set (e.g., `-codex`)
 - A token containing `github.com/…/pull/` or `gitlab.com/…/merge_requests/`
-  is the PR/MR URL
+  is the PR/MR URL — this is optional and only used for posting
 - All reviewers are enabled by default; only `-` prefixed names
   remove them
 
-#### Step 1.2: Determine the PR and platform
+#### Step 1.2: Determine the branch and merge base
 
-Detect the platform (GitHub or GitLab) from the URL or the current
-repo's remote.
+If a PR/MR URL was provided, check out that PR locally:
 
-**GitHub:**
-```bash
-gh pr view --json number,url,baseRefName,headRefName,title
-```
+**GitHub:** `gh pr checkout $PR_NUMBER`
+**GitLab:** `glab mr checkout $MR_IID`
 
-**GitLab:**
-```bash
-glab mr view --output json
-```
+Determine the base branch. In order of preference:
+1. If a PR/MR is known, use its base ref
+2. Otherwise, use the default branch (`main` or `master`)
 
-If this fails, stop: "No PR/MR found for the current branch. Push
-and open one first, or pass a URL."
-
-Extract: `OWNER`, `REPO`, `PR_NUMBER`, `BASE_REF`, `HEAD_REF`,
-`PR_TITLE`.
-
-#### Step 1.3: Check out the PR locally
-
-If not already on the PR's branch, check it out:
-
-**GitHub:**
-```bash
-gh pr checkout $PR_NUMBER
-```
-
-**GitLab:**
-```bash
-glab mr checkout $PR_NUMBER
-```
-
-#### Step 1.4: Ensure the merge base is up-to-date
-
-Fetch the base branch and compute the merge base:
+Fetch and compute the merge base:
 
 ```bash
 git fetch origin $BASE_REF
 MERGE_BASE=$(git merge-base origin/$BASE_REF HEAD)
 ```
 
-This merge base is used for all diffs throughout the review. Tell
-all subagents to diff against this ref.
+This merge base is used for all diffs throughout the review.
 
-#### Step 1.5: Get the diff and changed files
+#### Step 1.3: Get the diff and changed files
 
 ```bash
 git diff $MERGE_BASE...HEAD > /tmp/deep-review-diff.patch
 git diff $MERGE_BASE...HEAD --name-only
 ```
 
-Also fetch the PR/MR description for context:
+If a PR/MR exists, also fetch its description for context.
 
-**GitHub:**
-```bash
-gh pr view $PR_NUMBER --json body --jq '.body'
-```
-
-**GitLab:**
-```bash
-glab mr view $PR_NUMBER --output json | jq -r '.description'
-```
-
-If the diff is empty, stop: "PR has no changes to review."
+If the diff is empty, stop: "No changes found between HEAD and
+the base branch."
 
 ### Phase 2 — Familiarization
 
@@ -157,7 +123,7 @@ already be familiar with the changes (second or third round review)
 and want to skip straight to the panel.
 
 **If the conversation context shows a previous familiarization pass
-on this same PR, skip this phase entirely.**
+on this same branch, skip this phase entirely.**
 
 ### Phase 3 — Dispatch Reviewers
 
@@ -378,9 +344,9 @@ timeout each). Each gets this prompt:
 
 ### Phase 5 — Arbiter
 
-Before creating the review, act as an arbiter over all reviewer
+Before producing the report, act as an arbiter over all reviewer
 outputs. Review every finding from every reviewer and decide what
-to include in the final review.
+to include.
 
 #### Step 5.1: Deduplicate
 
@@ -393,7 +359,7 @@ Remove findings that are:
 - Clearly false positives (contradicted by code the reviewer missed)
 - Style nitpicks that don't match the project's conventions
 - Speculative ("this could be a problem if...") without evidence
-- Already addressed elsewhere in the PR (e.g., in a later commit)
+- Already addressed elsewhere in the branch (e.g., in a later commit)
 
 #### Step 5.3: Prioritize
 
@@ -404,21 +370,305 @@ Rank remaining findings by severity and impact:
 4. Architecture/design concerns
 5. Style and quality notes
 
-#### Step 5.4: Present arbiter summary
+#### Step 5.4: Write the verdict
 
-Show the user the curated findings before creating the review:
+Synthesize a verdict — the arbiter's final opinion:
+
+1. **Disposition**: Approve | Approve with nits | Request changes | Reject
+2. **Summary**: 2-3 sentences on what the changes do and whether
+   the approach is sound
+3. **Key findings**: The most important issues, one-line each
+4. **What's good**: Briefly acknowledge solid work
+5. **Recommendation**: What the author should do next
+
+#### Step 5.5: Present arbiter summary
+
+Show the user the curated findings before generating the report:
 
 ```
 Arbiter summary: N findings from M reviewers.
 Kept: X bugs (Y reproduced), Z style/arch notes.
 Dropped: W duplicates, V false positives.
+Verdict: {disposition}
 ```
 
 Proceed to Phase 6 unless the user objects.
 
-### Phase 6 — Create PENDING Review
+### Phase 6 — Generate HTML Report
 
-#### Step 6.1: Compute diff positions
+Produce a self-contained interactive HTML report and write it to
+the repo root as `deep-review.html`. Then open it in the browser.
+
+The report is a **single HTML file** with all CSS and JS inlined —
+no external dependencies, no CDN links. It must work offline when
+opened as a local file.
+
+#### Report structure
+
+The report has three main areas:
+
+**1. Sidebar (left, fixed)**
+
+- Branch name and date
+- Verdict badge (color-coded: green/yellow/orange/red)
+- Summary stats: files changed, findings count by severity
+- File list — each file shows its finding count as a badge.
+  Clicking a file scrolls the main area to that file's section.
+  Files with bug findings are highlighted
+- Finding index — a flat list of all findings by severity,
+  clickable to jump to each one
+
+**2. Header (top of main area)**
+
+- Verdict section: disposition, summary, recommendation
+- Key findings table
+- "What's good" section
+- Expandable: full reviewer breakdown (which reviewers ran,
+  how many findings each produced, timing)
+
+**3. Main area (scrollable, per-file sections)**
+
+For each changed file, in the order they appear in the diff:
+
+- **File header**: filename, lines added/removed, finding count
+- **Diff view**: the unified diff with syntax-highlighted code.
+  Line numbers for both old and new file shown in gutters
+- **Inline annotations**: findings appear as colored callout boxes
+  anchored to the relevant diff line. Color by severity:
+  - Red: `bug`, `security`
+  - Orange: `potential`
+  - Blue: `style`, `architecture`
+  - Gray: `info`
+- Each annotation shows:
+  - Severity badge and title
+  - Description
+  - Suggested fix (if any)
+  - Which reviewer(s) found it
+  - **Reproducer** (collapsible): steps, expected, actual,
+    files — with code blocks and copy buttons
+  - **Feedback controls** (see below)
+- **Annotation markers in the diff gutter**: small colored dots
+  on lines that have findings, so you can spot them while
+  scrolling the diff
+
+**4. Footer**
+
+- Reviewers used, timestamp, merge base ref
+- Export feedback button
+- "Generated by /deep-review"
+
+#### Feedback controls (screener loop)
+
+Each finding annotation includes interactive feedback controls
+that let the reviewer respond to the finding. This enables a
+feedback loop: review → correct → re-evaluate → repeat.
+
+**Per-finding controls:**
+
+- **Verdict buttons**: Agree / Disagree / Needs revision — one
+  click, visually highlighted when selected
+- **Severity override**: dropdown to reclassify (e.g., change
+  `bug` to `style` or `info`)
+- **Notes field**: freeform text area for the reviewer to explain
+  WHY they agree/disagree. These notes are critical — they encode
+  patterns the AI can generalize. Examples:
+  - "This is actually handled by the base class at line 200"
+  - "The race condition is prevented by the lock acquired in the
+    caller — grep for `_lock.acquire` in `scheduler.py`"
+  - "Not a bug — this is intentional defensive coding per our
+    style guide"
+- **Resolved checkbox**: mark a finding as addressed (dims it
+  visually but keeps it in the export)
+
+All feedback state persists in the browser via `localStorage`
+keyed by the report's branch + timestamp, so the reviewer can
+close the tab and come back.
+
+**Global controls (in the header):**
+
+- **Export Feedback** button: serializes all feedback (verdicts,
+  severity overrides, notes, resolved state) as a JSON blob.
+  Two export options:
+  - **Copy to clipboard** — for pasting directly into the Claude
+    Code session
+  - **Save to file** — writes `deep-review-feedback.json` to
+    the repo root
+- **Stats bar**: "N/M findings reviewed, X agreed, Y disagreed,
+  Z need revision"
+- **Jump to next unreviewed**: button that scrolls to the next
+  finding without a verdict
+
+**Export format:**
+
+```json
+{
+  "branch": "feature/xyz",
+  "merge_base": "abc123",
+  "reviewed_at": "2026-06-18T17:00:00Z",
+  "findings": [
+    {
+      "id": "f1",
+      "file": "src/foo.py",
+      "line": 42,
+      "title": "Missing null check",
+      "verdict": "disagree",
+      "severity_override": "info",
+      "note": "Handled by the caller — see guard at line 38",
+      "resolved": false
+    }
+  ]
+}
+```
+
+#### Interactivity (navigation)
+
+- **Filter by severity**: toggle buttons at the top to show/hide
+  findings by severity level
+- **Filter by verdict**: show only agreed / disagreed / unreviewed
+- **Collapse/expand all**: button to collapse or expand all
+  reproducer details and file sections
+- **Keyboard navigation**: `j`/`k` to jump between findings,
+  `f` to jump between files, `Escape` to return to top,
+  `a`/`d`/`r` to agree/disagree/needs-revision on the focused
+  finding
+- **Search**: simple text search across finding titles and
+  descriptions
+- **Sticky file header**: the current file's name stays visible
+  when scrolling through a long diff
+- **Dark/light mode**: toggle, defaulting to system preference
+
+#### Diff rendering
+
+Render the diff as a standard unified diff view:
+- Green background for added lines (`+`)
+- Red background for removed lines (`-`)
+- No background for context lines
+- Line numbers in both old-file and new-file gutters
+- Monospace font throughout
+- Wrap long lines (do not horizontal scroll)
+
+Use basic syntax highlighting if possible (keywords, strings,
+comments) based on the file extension. Keep it simple — a few
+regex rules per language, not a full parser.
+
+#### Writing the report
+
+Use the template at `template.html` (in this skill's directory) as
+the starting point. Replace the `{{PLACEHOLDER}}` tokens with real
+data from the review. The template provides the full CSS, JS, and
+layout — populate it with the actual diff, findings, reproducers,
+verdict, and file list.
+
+Key placeholders to replace:
+- `{{BRANCH_NAME}}` — branch or PR name
+- `{{REVIEW_DATE}}` — ISO date string
+- `{{VERDICT_DISPOSITION}}` — Approve / Request Changes / etc.
+- `{{VERDICT_SUMMARY}}` — arbiter's summary text
+- `{{PR_TITLE}}` — PR title or branch description
+- `{{WHATS_GOOD}}` — positive observations
+- `{{RECOMMENDATION}}` — next steps for the author
+- `{{MERGE_BASE}}` — the merge base commit ref
+- `{{FILES_CHANGED}}`, `{{TOTAL_FINDINGS}}`, `{{BUG_COUNT}}`,
+  `{{REPRODUCED_COUNT}}` — numeric stats
+- `{{FILE_LIST}}` — sidebar file entries (see template for format)
+- `{{FINDINGS_INDEX}}` — sidebar finding entries
+- `{{FINDINGS_TABLE_ROWS}}` — verdict table rows
+
+For each file, generate a `<section class="file-section">` with:
+- The diff rendered as `<table class="diff-table">` rows
+- Annotation `<div class="annotation {severity}">` blocks
+  inserted after the relevant diff line, each with feedback
+  controls
+
+Write the final HTML to `deep-review.html` in the repo root.
+
+Then open it:
+
+```bash
+# macOS
+open deep-review.html
+# Linux
+xdg-open deep-review.html
+```
+
+Tell the user: "Report written to `deep-review.html` and opened
+in your browser. Review the findings, add your feedback, then
+export and paste it back here — or say 'post to PR' when ready."
+
+### Phase 7 — Feedback Loop (Screener Pattern)
+
+When the user pastes exported feedback JSON (from the report's
+Export button) or says to read `deep-review-feedback.json`:
+
+#### Step 7.1: Ingest feedback
+
+Parse the feedback JSON. For each finding:
+
+- **Agreed findings**: keep as-is
+- **Disagreed findings**: read the reviewer's note carefully.
+  The note explains WHY — this is domain knowledge. Generalize
+  the pattern:
+  - If the note says "handled by X", verify X exists and does
+    handle it. If confirmed, drop the finding
+  - If the note describes a project convention, apply it to
+    similar findings across the entire set
+  - If the note identifies a false-positive pattern ("we
+    intentionally do X because Y"), scan for other findings
+    that match the same pattern and drop them too
+- **Needs revision**: re-examine the finding in light of the
+  note and revise the description, severity, or suggestion
+- **Severity overrides**: accept the reviewer's reclassification
+- **Resolved**: keep in the report but dim/collapse
+
+#### Step 7.2: Re-evaluate
+
+Based on the patterns extracted from reviewer feedback:
+
+1. Re-check all remaining findings (not just the ones with
+   feedback) against the newly learned patterns
+2. Drop findings that match a disagreed pattern
+3. Adjust severities where the reviewer's notes apply broadly
+4. Potentially spawn targeted re-review subagents for areas
+   the reviewer flagged as needing deeper analysis
+
+#### Step 7.3: Regenerate report
+
+Produce a new `deep-review.html` with:
+- Updated findings (dropped, revised, reclassified)
+- A "Changes from feedback" section showing what was modified
+- Previous feedback preserved in the UI (so the reviewer can
+  see their notes are reflected)
+- Any new findings from re-evaluation clearly marked as "New"
+
+Open the regenerated report. The reviewer can do another round
+of feedback if needed. Repeat until stable.
+
+#### Step 7.4: Summary
+
+After the loop stabilizes, present:
+
+```
+Feedback loop complete.
+  Round 1: N findings → M after feedback
+  Round 2: M findings → K after feedback (if applicable)
+  Final: K findings (X bugs, Y style, Z arch)
+```
+
+### Phase 9 — Post to PR (Optional)
+
+This phase runs ONLY if a PR/MR URL was provided or detected.
+After the user has reviewed the HTML report, offer to also post
+the findings as inline review comments on the PR.
+
+**Ask the user**: "Want me to also post these findings to PR #N?
+(submit / request changes / skip)"
+
+If the user says "skip", stop here. The HTML report is the
+deliverable.
+
+If the user wants to post:
+
+#### Step 7.1: Compute diff positions
 
 For each finding, compute the GitHub/GitLab `position` value.
 
@@ -430,12 +680,6 @@ For each finding, compute the GitHub/GitLab `position` value.
   and deletions (`-`)
 - The count does NOT reset between hunks
 
-Generate the diff for position mapping:
-
-```bash
-git diff $MERGE_BASE...HEAD -- $FILE
-```
-
 If a finding's line falls outside any diff hunk, use the nearest
 hunk's last position and prepend: "*Note: This issue is in unchanged
 code near the diff context.*"
@@ -446,7 +690,7 @@ the finding in the review body instead.
 **GitLab:** Uses `new_line` / `old_line` in the discussions API
 instead of `position`. Compute these from the diff hunk headers.
 
-#### Step 6.2: Format comment bodies
+#### Step 7.2: Format comment bodies
 
 **For `bug`/`security` findings WITH a confirmed reproducer:**
 
@@ -502,45 +746,16 @@ Fix: {suggestion}
 Suggestion: {suggestion}
 ```
 
-#### Step 6.3: Build review payload
+#### Step 7.3: Create PENDING review
 
 **GitHub:**
 
-Write to a temp file:
+Write the review payload to a temp file. The review body is the
+verdict (same content as the HTML report's header section).
 
-```bash
-cat > /tmp/deep-review-payload.json << 'EOF'
-{
-  "body": "<summary table>",
-  "comments": [
-    {"path": "file.py", "position": 10, "body": "**Bug: ...**"}
-  ]
-}
-EOF
-```
-
-The review body should contain a summary table:
-
-```markdown
-## Deep Review Summary
-
-| Severity | Count | Reproduced |
-|----------|-------|------------|
-| Bug      | N     | M/N        |
-| Security | N     | M/N        |
-| Potential | N    | —          |
-| Style    | N     | —          |
-| Architecture | N | —          |
-
-Reviewers: bugs, adversarial, correctness, ...
-```
-
-Cap at **30 inline comments**. If more than 30 findings, keep the
-highest-severity ones inline and list the rest in the review body.
-
-**CRITICAL**: Do NOT include an `"event"` field in the JSON. Omitting
-it creates a PENDING review. Using `"event": "COMMENT"` submits the
-review immediately, which defeats the approval gate.
+**CRITICAL**: Do NOT include an `"event"` field in the JSON.
+Omitting it creates a PENDING review. Using `"event": "COMMENT"`
+submits immediately.
 
 ```bash
 gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews \
@@ -548,150 +763,64 @@ gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews \
   --input /tmp/deep-review-payload.json
 ```
 
-Extract the review ID from the response (`--jq '.id'`).
+Cap at **30 inline comments**. Overflow goes to the review body.
 
 If the API returns a 422 (usually a bad `position`), remove the
-offending comment and retry. Move dropped comments to the review
-body.
+offending comment and retry.
 
-**GitLab:**
+**GitLab:** Use the discussions API to create draft notes.
 
-Use the discussions API to create draft notes:
-
-```bash
-glab api projects/$PROJECT_ID/merge_requests/$MR_IID/discussions \
-  --method POST ...
-```
-
-#### Step 6.4: Write the verdict
-
-After all inline comments are placed, write a verdict as the review
-body. This is the arbiter's final opinion on the PR — a synthesis,
-not a list.
-
-The verdict should include:
-
-1. **Disposition**: One of:
-   - **Approve** — no bugs found, or only minor style notes
-   - **Approve with nits** — minor issues that don't block merge
-   - **Request changes** — reproduced bugs or significant concerns
-   - **Reject** — fundamental design or security problems
-
-2. **Summary**: 2-3 sentences on what the PR does and whether the
-   approach is sound.
-
-3. **Key findings**: The most important issues, with one-line
-   summaries. Reference the inline comments ("see comment on
-   `file.py:42`").
-
-4. **What's good**: Briefly acknowledge things done well — this
-   isn't just a bug hunt.
-
-5. **Recommendation**: What the author should do next (fix N bugs
-   and reship, rethink approach, good to merge as-is, etc.).
-
-Format:
-
-```markdown
-## Deep Review Verdict
-
-**Disposition: {Request Changes}**
-
-{Summary of what the PR does and overall assessment.}
-
-### Key Findings
-
-| # | Severity | File | Finding | Reproduced? |
-|---|----------|------|---------|-------------|
-| 1 | Bug | `file.py:42` | Title | Yes |
-| 2 | Bug | `other.py:10` | Title | Yes |
-| 3 | Style | `lib.rs:88` | Title | — |
-
-### What's Good
-
-{Brief acknowledgement of solid work in the PR.}
-
-### Recommendation
-
-{What the author should do next.}
-
----
-Reviewers: {list}
-*Generated by `/deep-review`*
-```
-
-#### Step 6.5: Present results to the user
-
-Show the user:
+#### Step 7.4: User approval gate
 
 ```
 PENDING review created with N inline comments on PR #NNN.
-
-Verdict: {disposition}
-
-| Severity | Count | Reproduced |
-|----------|-------|------------|
-| Bug      | N     | M/N        |
-| ...      | ...   | ...        |
-
-Review URL: {PR_URL}
 
 Commands:
   "submit"           — post as informational comment
   "request changes"  — post requesting changes
   "drop"             — delete the pending review
-  "edit"             — open the PR in browser to edit first
+  "edit"             — open the PR to edit comments first
 ```
-
-### Phase 7 — User Approval Gate
 
 **Do NOT submit automatically. Wait for the user.**
 
 On "submit":
-
 ```bash
 gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews/$REVIEW_ID/events \
   --method POST -f event="COMMENT"
 ```
 
 On "request changes":
-
 ```bash
 gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews/$REVIEW_ID/events \
   --method POST -f event="REQUEST_CHANGES"
 ```
 
 On "drop":
-
 ```bash
 gh api -X DELETE repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews/$REVIEW_ID
 ```
 
-On "edit":
-
-Tell the user to visit the PR URL, edit/delete individual comments
-in the GitHub/GitLab UI, then come back and say "submit" or "drop".
-
 ## Error Handling
 
-- **`gh`/`glab` not authenticated**: Stop — "Run `gh auth login`
-  or `glab auth login` first."
-- **PR/MR not found**: Stop — show the error.
+- **`gh`/`glab` not authenticated**: Only matters for PR posting.
+  The review itself works without authentication.
+- **No PR exists**: Fine — skip Phase 7, the HTML report is the
+  deliverable.
 - **`codex` not installed**: Skip the codex reviewer, warn, continue.
 - **Subagent timeout**: Report which reviewer timed out, continue
   with available results.
-- **Empty diff**: Stop — "PR has no changes to review."
+- **Empty diff**: Stop — "No changes found."
 - **Position computation failure**: Move finding to review body.
 - **Review creation fails (422)**: Remove bad comments, retry.
-  Show raw payload on persistent failure.
 
 ## Guardrails
 
-- Never submit a review without explicit user confirmation.
+- Never submit a PR review without explicit user confirmation.
 - Never use `"event"` in the initial review creation payload.
-- Reproducers run locally. Do not push reproducer files or modify
-  the working tree permanently. Use /tmp for all reproducer files.
-- Do not run destructive operations in reproducers (dropping
-  databases, deleting non-temp files). Mark as `not_reproducible`.
-- Cap at 30 inline comments per review. Overflow goes to the
-  review body.
+- Reproducers run locally in /tmp. Do not push reproducer files
+  or modify the working tree (except `deep-review.html`).
+- Do not run destructive operations in reproducers. Mark as
+  `not_reproducible` instead.
+- Cap at 30 inline PR comments. Overflow goes to the review body.
+  The HTML report has no such cap.

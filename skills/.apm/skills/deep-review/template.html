@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Review — iandvt/main</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-subtle: #6e7681;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --green: #3fb950;
+    --green-bg: rgba(63,185,80,0.15);
+    --red: #f85149;
+    --red-bg: rgba(248,81,73,0.15);
+    --orange: #d29922;
+    --orange-bg: rgba(210,153,34,0.15);
+    --blue: #58a6ff;
+    --blue-bg: rgba(88,166,255,0.10);
+    --purple: #bc8cff;
+    --gray-bg: rgba(139,148,158,0.10);
+    --sidebar-w: 300px;
+    --header-h: 56px;
+    --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --radius: 8px;
+    --radius-sm: 4px;
+  }
+
+  [data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eaeef2;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --text-subtle: #959da5;
+    --accent: #0969da;
+    --accent-hover: #0550ae;
+    --green: #1a7f37;
+    --green-bg: rgba(26,127,55,0.10);
+    --red: #cf222e;
+    --red-bg: rgba(207,34,46,0.10);
+    --orange: #9a6700;
+    --orange-bg: rgba(154,103,0,0.10);
+    --blue: #0969da;
+    --blue-bg: rgba(9,105,218,0.08);
+    --gray-bg: rgba(101,109,118,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { font-size: 14px; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ─────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-header {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-logo {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .sidebar-branch {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .sidebar-date {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .verdict-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .verdict-badge.approve { background: var(--green-bg); color: var(--green); }
+  .verdict-badge.nits { background: var(--orange-bg); color: var(--orange); }
+  .verdict-badge.changes { background: var(--red-bg); color: var(--red); }
+  .verdict-badge.reject { background: var(--red-bg); color: var(--red); }
+
+  .verdict-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .sidebar-stats {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .sidebar-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding: 12px 16px 6px;
+  }
+
+  .sidebar-files {
+    list-style: none;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .sidebar-files li a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 16px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    transition: background 0.1s;
+  }
+
+  .sidebar-files li a:hover {
+    background: var(--bg-tertiary);
+    color: var(--text);
+  }
+
+  .sidebar-files li a.active {
+    background: var(--blue-bg);
+    color: var(--accent);
+  }
+
+  .file-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+  }
+
+  .file-badge.has-bugs { background: var(--red-bg); color: var(--red); }
+  .file-badge.has-findings { background: var(--orange-bg); color: var(--orange); }
+  .file-badge.clean { background: var(--gray-bg); color: var(--text-subtle); }
+
+  .sidebar-findings {
+    list-style: none;
+    border-top: 1px solid var(--border);
+    overflow-y: auto;
+    max-height: 300px;
+  }
+
+  .sidebar-findings li a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 16px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 12px;
+    transition: background 0.1s;
+  }
+
+  .sidebar-findings li a:hover {
+    background: var(--bg-tertiary);
+    color: var(--text);
+  }
+
+  .severity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .severity-dot.bug, .severity-dot.security { background: var(--red); }
+  .severity-dot.potential { background: var(--orange); }
+  .severity-dot.style, .severity-dot.architecture { background: var(--blue); }
+  .severity-dot.info { background: var(--text-subtle); }
+
+  /* ── Feedback stats bar ──────────────────────────────── */
+  .feedback-bar {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .feedback-bar .progress {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+
+  .feedback-bar .progress-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  .export-btn {
+    display: block;
+    width: calc(100% - 32px);
+    margin: 10px 16px;
+    padding: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s;
+  }
+
+  .export-btn:hover { background: var(--accent-hover); }
+
+  /* ── Main ────────────────────────────────────────────── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ── Top bar ─────────────────────────────────────────── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    backdrop-filter: blur(8px);
+  }
+
+  .filter-btn {
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .filter-btn:hover { border-color: var(--text-muted); color: var(--text); }
+  .filter-btn.active { background: var(--blue-bg); border-color: var(--accent); color: var(--accent); }
+
+  .filter-btn .count {
+    font-weight: 700;
+    margin-left: 4px;
+  }
+
+  .topbar-spacer { flex: 1; }
+
+  .theme-toggle {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+  }
+
+  .search-box {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+    width: 180px;
+    outline: none;
+  }
+
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-subtle); }
+
+  /* ── Verdict header ──────────────────────────────────── */
+  .verdict-section {
+    padding: 32px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .verdict-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .verdict-disposition {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  .verdict-disposition.approve { background: var(--green-bg); color: var(--green); }
+  .verdict-disposition.changes { background: var(--red-bg); color: var(--red); }
+
+  .verdict-summary {
+    color: var(--text-muted);
+    font-size: 15px;
+    max-width: 720px;
+    margin: 12px 0 20px;
+    line-height: 1.6;
+  }
+
+  .findings-table {
+    width: 100%;
+    max-width: 800px;
+    border-collapse: collapse;
+    margin: 16px 0;
+  }
+
+  .findings-table th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .findings-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .findings-table td:first-child { font-weight: 600; width: 30px; }
+
+  .severity-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .severity-tag.bug { background: var(--red-bg); color: var(--red); }
+  .severity-tag.security { background: var(--red-bg); color: var(--red); }
+  .severity-tag.potential { background: var(--orange-bg); color: var(--orange); }
+  .severity-tag.style { background: var(--blue-bg); color: var(--blue); }
+  .severity-tag.architecture { background: var(--blue-bg); color: var(--purple); }
+
+  .reproduced-tag {
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .reproduced-tag.yes { color: var(--green); }
+  .reproduced-tag.no { color: var(--text-muted); }
+
+  .whats-good {
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--green-bg);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--green);
+  }
+
+  .whats-good h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+    margin-bottom: 6px;
+  }
+
+  .whats-good p {
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .recommendation {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--accent);
+  }
+
+  .recommendation h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .recommendation p {
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  /* ── File sections ───────────────────────────────────── */
+  .file-section {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .file-header {
+    position: sticky;
+    top: 42px;
+    z-index: 40;
+    background: var(--bg-secondary);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+
+  .file-header:hover { background: var(--bg-tertiary); }
+
+  .file-icon {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .file-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .file-stats {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+  }
+
+  .file-stats .added { color: var(--green); }
+  .file-stats .removed { color: var(--red); }
+
+  .file-collapse {
+    color: var(--text-subtle);
+    font-size: 12px;
+    transition: transform 0.2s;
+  }
+
+  .file-section.collapsed .file-collapse { transform: rotate(-90deg); }
+  .file-section.collapsed .diff-container { display: none; }
+
+  /* ── Diff ────────────────────────────────────────────── */
+  .diff-container {
+    overflow-x: auto;
+  }
+
+  .diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .diff-table td {
+    padding: 0 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    vertical-align: top;
+  }
+
+  .diff-gutter {
+    width: 50px;
+    min-width: 50px;
+    text-align: right;
+    color: var(--text-subtle);
+    user-select: none;
+    padding-right: 8px !important;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  .diff-marker {
+    width: 4px;
+  }
+
+  .diff-marker .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    position: absolute;
+    left: 4px;
+    top: 7px;
+  }
+
+  .diff-line { width: 100%; }
+
+  .diff-line-add { background: var(--green-bg); }
+  .diff-line-del { background: var(--red-bg); }
+  .diff-line-hunk {
+    background: var(--blue-bg);
+    color: var(--text-muted);
+    padding: 4px 12px !important;
+    font-style: italic;
+  }
+
+  /* ── Annotations ─────────────────────────────────────── */
+  .annotation {
+    margin: 0 24px 0 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .annotation-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .annotation.bug .annotation-header,
+  .annotation.security .annotation-header { background: var(--red-bg); }
+  .annotation.potential .annotation-header { background: var(--orange-bg); }
+  .annotation.style .annotation-header,
+  .annotation.architecture .annotation-header { background: var(--blue-bg); }
+  .annotation.info .annotation-header { background: var(--gray-bg); }
+
+  .annotation-title {
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .annotation-reviewer {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  .annotation-body {
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--bg-secondary);
+  }
+
+  .annotation-body p { margin-bottom: 8px; }
+
+  .annotation-fix {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    margin-top: 8px;
+    border-left: 3px solid var(--accent);
+  }
+
+  .annotation-fix strong { color: var(--accent); }
+
+  /* ── Reproducer ──────────────────────────────────────── */
+  .reproducer {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .reproducer summary {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .reproducer summary:hover { color: var(--text); }
+
+  .reproducer-content {
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .reproducer-content h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 12px 0 4px;
+  }
+
+  .reproducer-content h4:first-child { margin-top: 0; }
+
+  .reproducer-content pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    position: relative;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+
+  .copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+  /* ── Feedback controls ───────────────────────────────── */
+  .feedback-controls {
+    padding: 10px 16px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .feedback-btn {
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .feedback-btn:hover { border-color: var(--text-muted); color: var(--text); }
+  .feedback-btn.agree.selected { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .feedback-btn.disagree.selected { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .feedback-btn.revise.selected { background: var(--orange-bg); border-color: var(--orange); color: var(--orange); }
+
+  .feedback-note {
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    resize: vertical;
+    min-height: 32px;
+    outline: none;
+  }
+
+  .feedback-note:focus { border-color: var(--accent); }
+  .feedback-note::placeholder { color: var(--text-subtle); }
+
+  .feedback-severity-select {
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 11px;
+    outline: none;
+    margin-left: auto;
+  }
+
+  /* ── Keyboard shortcut hint ──────────────────────────── */
+  .kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* ── Responsive ──────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+  }
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- SIDEBAR                                             -->
+<!-- ════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">Deep Review</div>
+    <div class="sidebar-branch">iandvt/main</div>
+    <div class="sidebar-date">2026-06-18</div>
+    <div class="verdict-badge changes">
+      <span class="dot"></span>
+      Request Changes
+    </div>
+  </div>
+
+  <div class="sidebar-stats">
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">Files</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">5</div>
+      <div class="stat-label">Findings</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" style="color: var(--red)">4</div>
+      <div class="stat-label">Bugs</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" style="color: var(--green)">4</div>
+      <div class="stat-label">Reproduced</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section-title">Files</div>
+  <ul class="sidebar-files">
+    <!-- {{FILE_LIST}} -->
+    <li><a href="#file-1"><span>src/environments/podman.py</span> <span class="file-badge has-bugs">4</span></a></li>
+    <li><a href="#file-2"><span>src/environments/factory.py</span> <span class="file-badge has-findings">1</span></a></li>
+    <li><a href="#file-3"><span>tests/unit/test_podman.py</span> <span class="file-badge clean">0</span></a></li>
+  </ul>
+
+  <div class="sidebar-section-title">Findings</div>
+  <ul class="sidebar-findings">
+    <!-- {{FINDINGS_INDEX}} -->
+    <li><a href="#f1"><span class="severity-dot bug"></span> Sidecar ops call docker compose</a></li>
+    <li><a href="#f2"><span class="severity-dot bug"></span> Resource limits silently ignored</a></li>
+    <li><a href="#f3"><span class="severity-dot bug"></span> force_build broken for prebuilt</a></li>
+    <li><a href="#f4"><span class="severity-dot bug"></span> Missing env dir upload</a></li>
+    <li><a href="#f5"><span class="severity-dot style"></span> No temp file cleanup</a></li>
+  </ul>
+
+  <div class="feedback-bar">
+    <span id="feedback-stats">0 / 5 findings reviewed</span>
+    <div class="progress"><div class="progress-fill" id="feedback-progress" style="width: 0%"></div></div>
+  </div>
+  <button class="export-btn" onclick="exportFeedback()">Export Feedback</button>
+</aside>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- MAIN AREA                                           -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <button class="filter-btn active" data-severity="all">All <span class="count">5</span></button>
+    <button class="filter-btn" data-severity="bug">Bug <span class="count">4</span></button>
+    <button class="filter-btn" data-severity="style">Style <span class="count">1</span></button>
+    <span class="topbar-spacer"></span>
+    <input type="text" class="search-box" placeholder="Search findings... (/)">
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">◑</button>
+  </div>
+
+  <!-- Verdict -->
+  <section class="verdict-section">
+    <div class="verdict-title">
+      Add Podman environment support
+      <span class="verdict-disposition changes">Request Changes</span>
+    </div>
+    <p class="verdict-summary">
+      Solid 1153-line Podman environment implementation that mirrors Docker's architecture. However, four inherited methods route through docker compose instead of podman-compose, resource limits are silently dropped, force_build is broken for prebuilt-image tasks, and environment directory files are not uploaded after start. All four bugs were reproduced at runtime.
+    </p>
+
+    <table class="findings-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Severity</th>
+          <th>File</th>
+          <th>Finding</th>
+          <th>Reproduced</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- {{FINDINGS_TABLE_ROWS}} -->
+        <tr>
+          <td>1</td>
+          <td><span class="severity-tag bug">Bug</span></td>
+          <td style="font-family: var(--font-mono); font-size: 12px">podman.py:92</td>
+          <td>Sidecar ops call <code>docker compose</code></td>
+          <td><span class="reproduced-tag yes">✓ Yes</span></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><span class="severity-tag bug">Bug</span></td>
+          <td style="font-family: var(--font-mono); font-size: 12px">podman.py:894</td>
+          <td>Resource limits silently ignored</td>
+          <td><span class="reproduced-tag yes">✓ Yes</span></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><span class="severity-tag bug">Bug</span></td>
+          <td style="font-family: var(--font-mono); font-size: 12px">podman.py:896</td>
+          <td><code>force_build</code> broken for prebuilt images</td>
+          <td><span class="reproduced-tag yes">✓ Yes</span></td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><span class="severity-tag bug">Bug</span></td>
+          <td style="font-family: var(--font-mono); font-size: 12px">podman.py:932</td>
+          <td>Missing <code>_upload_environment_dir_after_start</code></td>
+          <td><span class="reproduced-tag yes">✓ Yes</span></td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td><span class="severity-tag style">Style</span></td>
+          <td style="font-family: var(--font-mono); font-size: 12px">podman.py:934</td>
+          <td>No temp file cleanup in <code>stop()</code></td>
+          <td><span class="reproduced-tag no">—</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="whats-good">
+      <h3>What's Good</h3>
+      <p>The overall architecture is clean — subclassing DockerEnvironment and overriding the core methods (exec, start, stop, attach) is the right approach. SELinux label handling is well-implemented with enforcing-mode detection. The container readiness polling with retry logic is thorough. Good test coverage for the basic happy path.</p>
+    </div>
+
+    <div class="recommendation">
+      <h3>Recommendation</h3>
+      <p>Fix the 4 reproduced bugs before merge: (1) override sidecar methods, (2) add resource limits compose file, (3) use should_use_prebuilt_docker_image(), (4) add environment dir upload call. Consider also adding temp file cleanup in stop().</p>
+    </div>
+  </section>
+
+  <!-- ── File section with diff + annotations ────────── -->
+  <section class="file-section" id="file-1">
+    <div class="file-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <span class="file-icon">📄</span>
+      <span class="file-name">src/harbor/environments/podman.py</span>
+      <span class="file-stats">
+        <span class="added">+1153</span>
+        <span class="removed">-0</span>
+      </span>
+      <span class="file-badge has-bugs">4 findings</span>
+      <span class="file-collapse">▼</span>
+    </div>
+    <div class="diff-container">
+      <table class="diff-table">
+        <!-- Hunk header -->
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter"></td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-hunk">@@ -0,0 +1,1153 @@</td>
+        </tr>
+        <!-- Context lines -->
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">88</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+    SUPPORTS_WINDOWS: bool = False</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">89</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">90</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+    def __init__(self, *args, **kwargs):</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">91</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+        super().__init__(*args, **kwargs)</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">92</td>
+          <td class="diff-marker">
+            <div class="dot" style="background: var(--red)"></div>
+          </td>
+          <td class="diff-line diff-line-add">+        self._podman_compose_cmd: list[str] | None = None</td>
+        </tr>
+      </table>
+
+      <!-- Annotation: Finding 1 -->
+      <div class="annotation bug" id="f1">
+        <div class="annotation-header">
+          <span class="severity-tag bug">Bug</span>
+          <span class="annotation-title">Inherited sidecar operations call <code>docker compose</code> instead of <code>podman-compose</code></span>
+          <span class="annotation-reviewer">bugs, correctness</span>
+        </div>
+        <div class="annotation-body">
+          <p>
+            <code>PodmanEnvironment</code> inherits <code>service_exec</code>, <code>stop_service</code>,
+            and <code>_compose_exec</code> from <code>DockerEnvironment</code>. All of these route through
+            <code>_run_docker_compose_command</code>, which invokes <code>docker compose</code> — not
+            <code>podman-compose</code>.
+          </p>
+          <div class="annotation-fix">
+            <strong>Fix:</strong> Override <code>stop_service</code> and <code>_compose_exec</code> to route
+            through <code>_run_podman_compose_command</code>.
+          </div>
+
+          <details class="reproducer">
+            <summary>▶ Reproducer (verified)</summary>
+            <div class="reproducer-content">
+              <h4>Steps</h4>
+              <pre><code>uv run harbor run -p examples/tasks/sidecar-artifacts \
+  -e podman --agent oracle --delete --yes</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Expected</h4>
+              <p>Sidecar collect hooks and <code>stop_service</code> use <code>podman-compose</code>.</p>
+
+              <h4>Actual</h4>
+              <pre><code>Failed to stop main service before sidecar collection:
+  Command: docker compose --project-name sidecar-artifacts__kanqurm ... stop main.
+  Return code: 1.
+  Stdout: permission denied while trying to connect to the docker API
+  at unix:///var/run/docker.sock
+
+Collect hook in service 'api' exited with code 1:
+  stdout: permission denied while trying to connect to the docker API</code></pre>
+            </div>
+          </details>
+        </div>
+        <div class="feedback-controls">
+          <button class="feedback-btn agree" data-finding="f1" onclick="setVerdict(this, 'agree')">👍 Agree</button>
+          <button class="feedback-btn disagree" data-finding="f1" onclick="setVerdict(this, 'disagree')">👎 Disagree</button>
+          <button class="feedback-btn revise" data-finding="f1" onclick="setVerdict(this, 'revise')">✏️ Needs revision</button>
+          <select class="feedback-severity-select" data-finding="f1" onchange="setSeverity(this)">
+            <option value="" disabled selected>Reclassify…</option>
+            <option value="bug">Bug</option>
+            <option value="security">Security</option>
+            <option value="potential">Potential</option>
+            <option value="style">Style</option>
+            <option value="info">Info</option>
+          </select>
+          <textarea class="feedback-note" data-finding="f1" rows="1"
+            placeholder="Add a note — why you agree/disagree, what was missed…"
+            oninput="saveNote(this)"></textarea>
+        </div>
+      </div>
+
+      <!-- More diff lines... -->
+      <table class="diff-table">
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">893</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">894</td>
+          <td class="diff-marker">
+            <div class="dot" style="background: var(--red)"></div>
+          </td>
+          <td class="diff-line diff-line-add">+        self._mounts_compose_path = self._write_mounts_compose_file()</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">895</td>
+          <td class="diff-marker"></td>
+          <td class="diff-line diff-line-add">+</td>
+        </tr>
+        <tr>
+          <td class="diff-gutter"></td>
+          <td class="diff-gutter">896</td>
+          <td class="diff-marker">
+            <div class="dot" style="background: var(--red)"></div>
+          </td>
+          <td class="diff-line diff-line-add">+        self._use_prebuilt = not force_build and self.task_env_config.docker_image</td>
+        </tr>
+      </table>
+
+      <!-- Annotation: Finding 2 -->
+      <div class="annotation bug" id="f2">
+        <div class="annotation-header">
+          <span class="severity-tag bug">Bug</span>
+          <span class="annotation-title">Resource limits silently ignored</span>
+          <span class="annotation-reviewer">bugs</span>
+        </div>
+        <div class="annotation-body">
+          <p>
+            <code>start()</code> writes the mounts compose file but never calls
+            <code>_write_resources_compose_file()</code>. Docker does this at <code>docker.py:582</code>.
+            CPU/memory limits configured in <code>task.toml</code> have no effect under Podman.
+          </p>
+          <div class="annotation-fix">
+            <strong>Fix:</strong> Add <code>self._resources_compose_path = self._write_resources_compose_file()</code>
+            alongside the mounts call.
+          </div>
+
+          <details class="reproducer">
+            <summary>▶ Reproducer (verified)</summary>
+            <div class="reproducer-content">
+              <h4>Task config</h4>
+              <pre><code>[environment]
+cpus = 1
+memory_mb = 512</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Steps</h4>
+              <pre><code>uv run harbor run -p /tmp/reproducer-resources \
+  -e podman --agent oracle --delete --yes</code><button class="copy-btn">Copy</button></pre>
+
+              <h4>Expected</h4>
+              <p><code>memory.max = 536870912</code>, <code>cpu.max</code> shows a quota</p>
+
+              <h4>Actual</h4>
+              <pre><code>memory.max = max
+cpu.max = max 100000</code></pre>
+            </div>
+          </details>
+        </div>
+        <div class="feedback-controls">
+          <button class="feedback-btn agree" data-finding="f2" onclick="setVerdict(this, 'agree')">👍 Agree</button>
+          <button class="feedback-btn disagree" data-finding="f2" onclick="setVerdict(this, 'disagree')">👎 Disagree</button>
+          <button class="feedback-btn revise" data-finding="f2" onclick="setVerdict(this, 'revise')">✏️ Needs revision</button>
+          <select class="feedback-severity-select" data-finding="f2" onchange="setSeverity(this)">
+            <option value="" disabled selected>Reclassify…</option>
+            <option value="bug">Bug</option>
+            <option value="potential">Potential</option>
+            <option value="style">Style</option>
+            <option value="info">Info</option>
+          </select>
+          <textarea class="feedback-note" data-finding="f2" rows="1"
+            placeholder="Add a note…"
+            oninput="saveNote(this)"></textarea>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // ── State ───────────────────────────────────────────
+  const STATE_KEY = 'deep-review-iandvt/main-2026-06-18';
+  let state = JSON.parse(localStorage.getItem(STATE_KEY) || '{}');
+
+  function persist() {
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    updateStats();
+  }
+
+  // ── Verdict buttons ─────────────────────────────────
+  function setVerdict(btn, verdict) {
+    const id = btn.dataset.finding;
+    const container = btn.closest('.feedback-controls');
+    container.querySelectorAll('.feedback-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    if (!state[id]) state[id] = {};
+    state[id].verdict = verdict;
+    persist();
+  }
+
+  // ── Severity override ───────────────────────────────
+  function setSeverity(select) {
+    const id = select.dataset.finding;
+    if (!state[id]) state[id] = {};
+    state[id].severity_override = select.value;
+    persist();
+  }
+
+  // ── Notes ───────────────────────────────────────────
+  function saveNote(textarea) {
+    const id = textarea.dataset.finding;
+    if (!state[id]) state[id] = {};
+    state[id].note = textarea.value;
+    persist();
+  }
+
+  // ── Stats ───────────────────────────────────────────
+  function updateStats() {
+    const total = document.querySelectorAll('.annotation').length;
+    const reviewed = Object.values(state).filter(s => s.verdict).length;
+    const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+    document.getElementById('feedback-stats').textContent = `${reviewed} / ${total} findings reviewed`;
+    document.getElementById('feedback-progress').style.width = pct + '%';
+  }
+
+  // ── Export ──────────────────────────────────────────
+  function exportFeedback() {
+    const findings = [];
+    document.querySelectorAll('.annotation').forEach(ann => {
+      const id = ann.id;
+      const s = state[id] || {};
+      if (!s.verdict && !s.note && !s.severity_override) return;
+      findings.push({
+        id,
+        file: ann.querySelector('.annotation-title')?.textContent?.trim() || '',
+        verdict: s.verdict || null,
+        severity_override: s.severity_override || null,
+        note: s.note || null
+      });
+    });
+    const payload = {
+      branch: 'iandvt/main',
+      merge_base: 'db6072b5',
+      reviewed_at: new Date().toISOString(),
+      findings
+    };
+    const json = JSON.stringify(payload, null, 2);
+    navigator.clipboard.writeText(json).then(() => {
+      alert('Feedback copied to clipboard! Paste it into your Claude Code session.');
+    }).catch(() => {
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'deep-review-feedback.json';
+      a.click();
+    });
+  }
+
+  // ── Theme toggle ────────────────────────────────────
+  function toggleTheme() {
+    const body = document.body;
+    body.dataset.theme = body.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('deep-review-theme', body.dataset.theme);
+  }
+
+  // ── Keyboard shortcuts ──────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    const annotations = [...document.querySelectorAll('.annotation')];
+    const current = annotations.findIndex(a => {
+      const rect = a.getBoundingClientRect();
+      return rect.top >= 0 && rect.top < window.innerHeight / 2;
+    });
+
+    if (e.key === 'j' && current < annotations.length - 1) {
+      annotations[current + 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (e.key === 'k' && current > 0) {
+      annotations[current - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (e.key === '/') {
+      e.preventDefault();
+      document.querySelector('.search-box')?.focus();
+    } else if (e.key === 'Escape') {
+      document.querySelector('.search-box')?.blur();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
+
+  // ── Init ────────────────────────────────────────────
+  (function init() {
+    const savedTheme = localStorage.getItem('deep-review-theme');
+    if (savedTheme) document.body.dataset.theme = savedTheme;
+    else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+      document.body.dataset.theme = 'light';
+    }
+
+    // Restore feedback state
+    document.querySelectorAll('.feedback-btn').forEach(btn => {
+      const id = btn.dataset.finding;
+      const s = state[id];
+      if (s?.verdict && btn.classList.contains(s.verdict)) {
+        btn.classList.add('selected');
+      }
+    });
+    document.querySelectorAll('.feedback-note').forEach(ta => {
+      const id = ta.dataset.finding;
+      if (state[id]?.note) ta.value = state[id].note;
+    });
+    document.querySelectorAll('.feedback-severity-select').forEach(sel => {
+      const id = sel.dataset.finding;
+      if (state[id]?.severity_override) sel.value = state[id].severity_override;
+    });
+    updateStats();
+  })();
+</script>
+</body>
+</html>
