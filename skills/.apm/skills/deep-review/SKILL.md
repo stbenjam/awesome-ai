@@ -1,36 +1,40 @@
 ---
 name: "deep-review"
-description: "Multi-agent panel code review with forced runtime reproducers for all bug findings. Creates a GitHub PENDING review with inline comments — won't submit until you approve."
-argument-hint: "[bugs,adversarial,codex,...] [pr-url]"
+description: "Multi-agent panel code review with forced runtime reproducers for all bug findings. Checks out the PR locally, dispatches parallel reviewers, verifies bugs, and creates a PENDING review with inline comments — won't submit until you approve."
+argument-hint: "[-supply-chain,-codex,...] [pr-url]"
 ---
 
 # Deep Review — Multi-Agent Panel Review with Reproducers
 
-Dispatch parallel subagent reviewers, each with a different focus.
-Every bug finding is verified with a runtime reproducer before
-posting. Results become a GitHub PENDING review with inline comments
-and collapsible reproducer details. Nothing is submitted until the
+Check out a PR locally, understand the changes, dispatch parallel
+subagent reviewers (each with a different focus), verify every bug
+with a runtime reproducer, then post results as a GitHub/GitLab
+PENDING review with inline comments. Nothing is submitted until the
 user approves.
 
 ## Arguments
 
 ```
-/deep-review [reviewers] [pr-url]
+/deep-review [modifiers] [pr-url]
 ```
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| reviewers | `bugs,adversarial` | Comma-separated reviewer types |
-| pr-url | (inferred) | GitHub PR URL. Omit to infer from current branch |
+All reviewer types are enabled by default. Use `-` prefix to exclude:
+
+| Argument | Description |
+|----------|-------------|
+| modifiers | Comma-separated. Prefix with `-` to exclude a default reviewer (e.g., `-supply-chain,-codex`). Bare names are no-ops since all are already enabled |
+| pr-url | GitHub or GitLab PR/MR URL. Omit to infer from current branch |
 
 Examples:
 
-- `/deep-review` — default reviewers, infer PR
-- `/deep-review bugs,codex` — bugs + external codex review
-- `/deep-review bugs,adversarial,supply-chain https://github.com/org/repo/pull/42`
-- `/deep-review correctness,architecture` — spec compliance + design review
+- `/deep-review` — all reviewers, infer PR from current branch
+- `/deep-review -codex` — skip the codex CLI reviewer
+- `/deep-review -supply-chain,-architecture https://github.com/org/repo/pull/42`
+- `/deep-review https://gitlab.com/org/repo/-/merge_requests/7` — GitLab MR
 
-## Reviewer Types
+### Default Reviewer Types
+
+All are enabled unless excluded with `-`:
 
 | Type | Focus | Reproducer Required? |
 |------|-------|---------------------|
@@ -48,42 +52,120 @@ Examples:
 
 #### Step 1.1: Parse arguments
 
-Parse the argument string. The first token that looks like a
-comma-separated word list (no slashes, no dots) is the reviewer
-list. The first token containing `github.com` and `/pull/` is the
-PR URL. Either or both may be absent.
+Parse the argument string:
+- Tokens starting with `-` followed by a reviewer name exclude
+  that reviewer from the default set (e.g., `-codex`)
+- A token containing `github.com/…/pull/` or `gitlab.com/…/merge_requests/`
+  is the PR/MR URL
+- All reviewers are enabled by default; only `-` prefixed names
+  remove them
 
-Default reviewers when none specified: `bugs,adversarial`.
+#### Step 1.2: Determine the PR and platform
 
-#### Step 1.2: Determine the PR
+Detect the platform (GitHub or GitLab) from the URL or the current
+repo's remote.
 
-If a PR URL was provided, extract `OWNER`, `REPO`, and `PR_NUMBER`.
-
-If no URL, infer from the current branch:
-
+**GitHub:**
 ```bash
 gh pr view --json number,url,baseRefName,headRefName,title
 ```
 
-If this fails, stop: "No PR found for the current branch. Push and
-open a PR first, or pass a PR URL."
+**GitLab:**
+```bash
+glab mr view --output json
+```
 
-#### Step 1.3: Fetch diff and context
+If this fails, stop: "No PR/MR found for the current branch. Push
+and open one first, or pass a URL."
 
-Run in parallel:
+Extract: `OWNER`, `REPO`, `PR_NUMBER`, `BASE_REF`, `HEAD_REF`,
+`PR_TITLE`.
+
+#### Step 1.3: Check out the PR locally
+
+If not already on the PR's branch, check it out:
+
+**GitHub:**
+```bash
+gh pr checkout $PR_NUMBER
+```
+
+**GitLab:**
+```bash
+glab mr checkout $PR_NUMBER
+```
+
+#### Step 1.4: Ensure the merge base is up-to-date
+
+Fetch the base branch and compute the merge base:
 
 ```bash
-gh pr diff $PR_NUMBER --repo $OWNER/$REPO > /tmp/deep-review-diff.patch
-gh pr diff $PR_NUMBER --repo $OWNER/$REPO --name-only
-gh pr view $PR_NUMBER --repo $OWNER/$REPO --json body --jq '.body'
+git fetch origin $BASE_REF
+MERGE_BASE=$(git merge-base origin/$BASE_REF HEAD)
+```
+
+This merge base is used for all diffs throughout the review. Tell
+all subagents to diff against this ref.
+
+#### Step 1.5: Get the diff and changed files
+
+```bash
+git diff $MERGE_BASE...HEAD > /tmp/deep-review-diff.patch
+git diff $MERGE_BASE...HEAD --name-only
+```
+
+Also fetch the PR/MR description for context:
+
+**GitHub:**
+```bash
+gh pr view $PR_NUMBER --json body --jq '.body'
+```
+
+**GitLab:**
+```bash
+glab mr view $PR_NUMBER --output json | jq -r '.description'
 ```
 
 If the diff is empty, stop: "PR has no changes to review."
 
-### Phase 2 — Dispatch Reviewers
+### Phase 2 — Familiarization
 
-Launch one subagent per selected reviewer type, **all in parallel**,
+Before dispatching reviewers, examine the codebase and present the
+user a summary of what's changing.
+
+#### Step 2.1: Summarize the changes
+
+Read the diff and the changed files in context. Present a concise
+summary to the user:
+
+- What areas of the codebase are affected
+- The nature of the changes (new feature, bug fix, refactor, etc.)
+- Key design decisions visible in the diff
+
+#### Step 2.2: Offer local testing
+
+If the changes are testable locally (e.g., a feature with tests,
+a bug fix with a repro case, a CLI change, a library with a test
+suite), offer to run the test suite or manually test the feature
+before proceeding to the review.
+
+If the changes are NOT locally testable (infrastructure-only,
+CI config, documentation, etc.), note this.
+
+**Ask the user** before testing — do not just do it. The user may
+already be familiar with the changes (second or third round review)
+and want to skip straight to the panel.
+
+**If the conversation context shows a previous familiarization pass
+on this same PR, skip this phase entirely.**
+
+### Phase 3 — Dispatch Reviewers
+
+Launch one subagent per enabled reviewer type, **all in parallel**,
 using the Agent tool with `run_in_background: true`.
+
+Tell every subagent the merge base so they diff correctly:
+`git diff $MERGE_BASE...HEAD` (not `gh pr diff`).
 
 Every reviewer subagent MUST return its findings as a JSON array
 in a fenced `json` code block at the end of its response:
@@ -107,8 +189,8 @@ in a fenced `json` code block at the end of its response:
 
 #### Reviewer prompts
 
-Each reviewer subagent gets the full diff, changed file list, and
-access to the codebase. Use these prompts:
+Each reviewer subagent gets the merge base ref, changed file list,
+and full access to the locally checked-out codebase.
 
 ---
 
@@ -129,11 +211,12 @@ access to the codebase. Use these prompts:
 > suggestions. Test coverage gaps (unless a test is WRONG).
 > Documentation.
 >
-> **Method**: Read the full diff. For each changed file, read the
-> FULL file (not just the diff) to understand context. Trace code
-> paths — follow function calls, check callers and callees, check
-> base class methods that are inherited but not overridden. For
-> each bug found, set `reproducer_needed: true`.
+> **Method**: Run `git diff {MERGE_BASE}...HEAD` for the full diff.
+> For each changed file, read the FULL file (not just the diff) to
+> understand context. Trace code paths — follow function calls,
+> check callers and callees, check base class methods that are
+> inherited but not overridden. For each bug found, set
+> `reproducer_needed: true`.
 
 ---
 
@@ -154,7 +237,9 @@ access to the codebase. Use these prompts:
 > state assumptions could be violated? What happens if called
 > twice, concurrently, or out of order? What happens at boundaries?
 >
-> Set `reproducer_needed: true` for every finding.
+> Run `git diff {MERGE_BASE}...HEAD` for the full diff. Read full
+> source files for context. Set `reproducer_needed: true` for every
+> finding.
 
 ---
 
@@ -170,8 +255,9 @@ access to the codebase. Use these prompts:
 > what they claim? Are error messages accurate? Are comments still
 > true? Do config defaults match docs?
 >
-> For findings that claim a concrete bug, set `reproducer_needed:
-> true`. For spec/contract mismatches, set severity to `potential`.
+> Run `git diff {MERGE_BASE}...HEAD` for the full diff. For
+> findings that claim a concrete bug, set `reproducer_needed: true`.
+> For spec/contract mismatches, set severity to `potential`.
 
 ---
 
@@ -183,10 +269,12 @@ access to the codebase. Use these prompts:
 > Lockfile changes — unexpected version bumps, new transitive deps.
 > Build script modifications — download URLs, curl|bash, post-install
 > scripts. Container image changes — unverified registries, tag
-> mutability. GitHub Actions changes — new third-party actions,
-> version unpinning. Credential exposure — API keys, tokens in code.
+> mutability. GitHub Actions / GitLab CI changes — new third-party
+> actions, version unpinning. Credential exposure — API keys, tokens
+> in code.
 >
-> Set `reproducer_needed: false` for all findings. Set severity to
+> Run `git diff {MERGE_BASE}...HEAD` for the full diff. Set
+> `reproducer_needed: false` for all findings. Set severity to
 > `security` for confirmed risks.
 
 ---
@@ -196,7 +284,7 @@ access to the codebase. Use these prompts:
 This reviewer does NOT use a subagent prompt. Run the CLI directly:
 
 ```bash
-gh pr diff $PR_NUMBER --repo $OWNER/$REPO | codex review -
+git diff $MERGE_BASE...HEAD | codex review -
 ```
 
 Parse the output and normalize each finding to the standard JSON
@@ -218,9 +306,9 @@ reviewer. Do not fail the entire review.
 > compatibility breaks. Inconsistency with surrounding code
 > patterns. Test quality (flaky patterns, missing assertions).
 >
-> For findings claiming a concrete bug or regression, set
-> `reproducer_needed: true`. For quality issues, set severity
-> to `style`.
+> Run `git diff {MERGE_BASE}...HEAD` for the full diff. For findings
+> claiming a concrete bug or regression, set `reproducer_needed:
+> true`. For quality issues, set severity to `style`.
 
 ---
 
@@ -234,10 +322,11 @@ reviewer. Do not fail the entire review.
 > — is the public interface minimal? Extensibility — easy to modify
 > later? Separation of concerns. Consistency with project patterns.
 >
-> Set severity to `architecture` for all findings. Set
-> `reproducer_needed: false`. Focus on decisions costly to change.
+> Run `git diff {MERGE_BASE}...HEAD` for the full diff. Set severity
+> to `architecture` for all findings. Set `reproducer_needed: false`.
+> Focus on decisions costly to change.
 
-### Phase 3 — Reproduce
+### Phase 4 — Reproduce
 
 After all reviewer subagents complete, collect their findings.
 
@@ -287,19 +376,65 @@ timeout each). Each gets this prompt:
 - `reproduced: "not_reproducible"` — keep severity, add note
   explaining why
 
-### Phase 4 — Create PENDING Review
+### Phase 5 — Arbiter
 
-#### Step 4.1: Compute diff positions
+Before creating the review, act as an arbiter over all reviewer
+outputs. Review every finding from every reviewer and decide what
+to include in the final review.
 
-For each finding, compute the GitHub `position` value. This is the
-line number within the **diff hunk**, NOT the file line number.
+#### Step 5.1: Deduplicate
 
-Rules:
-1. Parse the diff for the target file
-2. Find the `@@ -a,b +c,d @@` hunk containing the target line
-3. Count every line after the `@@` header, starting at 1
-4. Context (` `), additions (`+`), and deletions (`-`) all count
-5. For entirely new files, position = line number in the new file
+Multiple reviewers may find the same issue. Merge duplicates,
+keeping the most detailed description and the strongest reproducer.
+
+#### Step 5.2: Filter noise
+
+Remove findings that are:
+- Clearly false positives (contradicted by code the reviewer missed)
+- Style nitpicks that don't match the project's conventions
+- Speculative ("this could be a problem if...") without evidence
+- Already addressed elsewhere in the PR (e.g., in a later commit)
+
+#### Step 5.3: Prioritize
+
+Rank remaining findings by severity and impact:
+1. Reproduced bugs with security implications
+2. Reproduced functional bugs
+3. Unreproduced but plausible bugs (downgraded to `potential`)
+4. Architecture/design concerns
+5. Style and quality notes
+
+#### Step 5.4: Present arbiter summary
+
+Show the user the curated findings before creating the review:
+
+```
+Arbiter summary: N findings from M reviewers.
+Kept: X bugs (Y reproduced), Z style/arch notes.
+Dropped: W duplicates, V false positives.
+```
+
+Proceed to Phase 6 unless the user objects.
+
+### Phase 6 — Create PENDING Review
+
+#### Step 6.1: Compute diff positions
+
+For each finding, compute the GitHub/GitLab `position` value.
+
+**GitHub position rules:**
+- The `position` is the 1-based line index in the file's entire
+  unified diff, starting at 1 for the very first `@@` header
+- Count every line sequentially across ALL hunks, including
+  subsequent `@@` headers, context lines (` `), additions (`+`),
+  and deletions (`-`)
+- The count does NOT reset between hunks
+
+Generate the diff for position mapping:
+
+```bash
+git diff $MERGE_BASE...HEAD -- $FILE
+```
 
 If a finding's line falls outside any diff hunk, use the nearest
 hunk's last position and prepend: "*Note: This issue is in unchanged
@@ -308,7 +443,10 @@ code near the diff context.*"
 If position computation fails, skip the inline comment and include
 the finding in the review body instead.
 
-#### Step 4.2: Format comment bodies
+**GitLab:** Uses `new_line` / `old_line` in the discussions API
+instead of `position`. Compute these from the diff hunk headers.
+
+#### Step 6.2: Format comment bodies
 
 **For `bug`/`security` findings WITH a confirmed reproducer:**
 
@@ -364,7 +502,9 @@ Fix: {suggestion}
 Suggestion: {suggestion}
 ```
 
-#### Step 4.3: Build review payload
+#### Step 6.3: Build review payload
+
+**GitHub:**
 
 Write to a temp file:
 
@@ -392,13 +532,15 @@ The review body should contain a summary table:
 | Style    | N     | —          |
 | Architecture | N | —          |
 
-Reviewers: bugs, adversarial
+Reviewers: bugs, adversarial, correctness, ...
 ```
 
 Cap at **30 inline comments**. If more than 30 findings, keep the
 highest-severity ones inline and list the rest in the review body.
 
-#### Step 4.4: Submit PENDING review
+**CRITICAL**: Do NOT include an `"event"` field in the JSON. Omitting
+it creates a PENDING review. Using `"event": "COMMENT"` submits the
+review immediately, which defeats the approval gate.
 
 ```bash
 gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews \
@@ -406,26 +548,86 @@ gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews \
   --input /tmp/deep-review-payload.json
 ```
 
-**CRITICAL**: Do NOT include an `"event"` field in the JSON. Omitting
-it creates a PENDING review. Using `"event": "COMMENT"` submits the
-review immediately, which defeats the approval gate.
-
-Extract the review ID from the response:
-
-```bash
-REVIEW_ID=$(... --jq '.id')
-```
+Extract the review ID from the response (`--jq '.id'`).
 
 If the API returns a 422 (usually a bad `position`), remove the
 offending comment and retry. Move dropped comments to the review
 body.
 
-### Phase 5 — User Approval Gate
+**GitLab:**
 
-Present results to the user:
+Use the discussions API to create draft notes:
+
+```bash
+glab api projects/$PROJECT_ID/merge_requests/$MR_IID/discussions \
+  --method POST ...
+```
+
+#### Step 6.4: Write the verdict
+
+After all inline comments are placed, write a verdict as the review
+body. This is the arbiter's final opinion on the PR — a synthesis,
+not a list.
+
+The verdict should include:
+
+1. **Disposition**: One of:
+   - **Approve** — no bugs found, or only minor style notes
+   - **Approve with nits** — minor issues that don't block merge
+   - **Request changes** — reproduced bugs or significant concerns
+   - **Reject** — fundamental design or security problems
+
+2. **Summary**: 2-3 sentences on what the PR does and whether the
+   approach is sound.
+
+3. **Key findings**: The most important issues, with one-line
+   summaries. Reference the inline comments ("see comment on
+   `file.py:42`").
+
+4. **What's good**: Briefly acknowledge things done well — this
+   isn't just a bug hunt.
+
+5. **Recommendation**: What the author should do next (fix N bugs
+   and reship, rethink approach, good to merge as-is, etc.).
+
+Format:
+
+```markdown
+## Deep Review Verdict
+
+**Disposition: {Request Changes}**
+
+{Summary of what the PR does and overall assessment.}
+
+### Key Findings
+
+| # | Severity | File | Finding | Reproduced? |
+|---|----------|------|---------|-------------|
+| 1 | Bug | `file.py:42` | Title | Yes |
+| 2 | Bug | `other.py:10` | Title | Yes |
+| 3 | Style | `lib.rs:88` | Title | — |
+
+### What's Good
+
+{Brief acknowledgement of solid work in the PR.}
+
+### Recommendation
+
+{What the author should do next.}
+
+---
+Reviewers: {list}
+*Generated by `/deep-review`*
+```
+
+#### Step 6.5: Present results to the user
+
+Show the user:
 
 ```
 PENDING review created with N inline comments on PR #NNN.
+
+Verdict: {disposition}
 
 | Severity | Count | Reproduced |
 |----------|-------|------------|
@@ -435,11 +637,13 @@ PENDING review created with N inline comments on PR #NNN.
 Review URL: {PR_URL}
 
 Commands:
-  "submit"         — post as informational comment
-  "request changes" — post requesting changes
-  "drop"           — delete the pending review
-  "edit"           — open the PR in browser to edit first
+  "submit"           — post as informational comment
+  "request changes"  — post requesting changes
+  "drop"             — delete the pending review
+  "edit"             — open the PR in browser to edit first
 ```
+
+### Phase 7 — User Approval Gate
 
 **Do NOT submit automatically. Wait for the user.**
 
@@ -463,10 +667,16 @@ On "drop":
 gh api -X DELETE repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews/$REVIEW_ID
 ```
 
+On "edit":
+
+Tell the user to visit the PR URL, edit/delete individual comments
+in the GitHub/GitLab UI, then come back and say "submit" or "drop".
+
 ## Error Handling
 
-- **`gh` not authenticated**: Stop — "Run `gh auth login` first."
-- **PR not found**: Stop — show the error.
+- **`gh`/`glab` not authenticated**: Stop — "Run `gh auth login`
+  or `glab auth login` first."
+- **PR/MR not found**: Stop — show the error.
 - **`codex` not installed**: Skip the codex reviewer, warn, continue.
 - **Subagent timeout**: Report which reviewer timed out, continue
   with available results.
