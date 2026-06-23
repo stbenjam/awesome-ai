@@ -61,6 +61,8 @@ def is_trusted(author_login, author_association):
         return True
     if author_login in AUTHORIZED_BOTS:
         return True
+    if f"{author_login}[bot]" in AUTHORIZED_BOTS:
+        return True
     return False
 
 
