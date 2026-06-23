@@ -274,11 +274,8 @@ if running in /loop mode, otherwise just wait.
 
 #### Step 7.0: Cancel any active `/loop` schedule
 
-If this skill is running inside a `/loop` cron schedule, cancel it
-using `CronDelete` with the job ID before reporting. Use `CronList`
-to find active jobs matching this skill. There is no reason to keep
-looping once the PR is in a stable state — continuing wastes tokens
-and produces no-op iterations.
+If running inside a `/loop` cron, use `CronList` to find the job
+and `CronDelete` to cancel it. Don't keep looping on a stable PR.
 
 #### Step 7.1: Report summary
 
