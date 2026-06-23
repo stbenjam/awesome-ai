@@ -12,6 +12,21 @@ cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty')
 lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
 lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // 0')
+session_id=$(echo "$input" | jq -r '.session_id // empty')
+
+# ── Daily cost tracking ──
+# Reads token usage from all today's JSONL session files and estimates cost
+# using pricing calibrated from the current session's known cost.
+# Falls back to current session cost if the Python script fails.
+daily_cost=0
+if [ -n "$session_id" ]; then
+    daily_cost=$(python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/compute-daily-cost.py" \
+        "$session_id" "${cost:-0}" 2>/dev/null) || daily_cost="${cost:-0}"
+    # Ensure we have a numeric value
+    if [ -z "$daily_cost" ] || ! printf '%f' "$daily_cost" >/dev/null 2>&1; then
+        daily_cost="${cost:-0}"
+    fi
+fi
 
 # Shorten home prefix to ~
 home_dir="${HOME:-$(eval echo ~)}"
@@ -161,9 +176,10 @@ done
 
 ctx_str="${ctx_icon} ${GRAY}▐${RST}${bar}${GRAY}▌${RST} ${PCT_COLOR}${BOLD}${used_int}%${RST}${warning}"
 
-# Cost
+# Cost — session and daily
 cost_fmt=$(printf '$%.2f' "${cost:-0}")
-cost_str="${SEP}${GREEN}💰 ${cost_fmt}${RST}"
+daily_fmt=$(printf '$%.2f' "${daily_cost:-0}")
+cost_str="${SEP}${GREEN}💰 ${cost_fmt}${RST}${DIM}${GRAY} session${RST}${SEP}${YELLOW}📅 ${daily_fmt}${RST}${DIM}${GRAY} today${RST}"
 
 # Duration
 dur_str=""
