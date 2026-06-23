@@ -1,7 +1,7 @@
 ---
 name: "pr-loop"
 description: "Shepherd a PR to mergeable state: merge base branch, fix CI, address review comments, resolve threads, and loop until green and approved."
-argument-hint: "<pr-url>"
+argument-hint: "[pr-url]"
 ---
 
 # PR Loop — Shepherd a PR to Mergeable State
@@ -14,11 +14,12 @@ bots, resolves addressed comment threads, and loops until done or idle.
 ## Arguments
 
 ```
-/pr-loop <pr-url>
+/pr-loop [pr-url]
 ```
 
-- `pr-url` (required) — full GitHub PR URL, e.g.
+- `pr-url` (optional) — full GitHub PR URL, e.g.
   `https://github.com/org/repo/pull/42`
+- If omitted, detect the PR from the current branch (see Step 1.1)
 
 ## Prerequisites
 
@@ -29,12 +30,26 @@ bots, resolves addressed comment threads, and loops until done or idle.
 
 ### Phase 1 — Setup
 
-#### Step 1.1: Parse the PR URL
+#### Step 1.1: Determine the PR
 
-Extract `owner`, `repo`, and `pr_number` from the URL.
-Validate format: must match `https://github.com/<owner>/<repo>/pull/<number>`.
+**If a PR URL was provided**: extract `owner`, `repo`, and
+`pr_number` from the URL. Validate format: must match
+`https://github.com/<owner>/<repo>/pull/<number>`.
+
+**If no argument was provided**: check if the current directory is
+a git repo on a branch with an open PR:
+
+```bash
+gh pr view --json number,url,headRefName,baseRefName
+```
+
+If this succeeds, use the current directory and branch — skip
+Steps 1.2 and 1.3 entirely. If it fails (no open PR for the
+current branch), stop and tell the user to provide a PR URL.
 
 #### Step 1.2: Clone or locate the repository
+
+Only runs when a PR URL was provided (skipped when using current branch).
 
 `GIT_DIR` is the directory where repos are kept (defaults to `~/git`).
 Check for the repo in this order:
@@ -50,6 +65,8 @@ After locating or cloning, `cd` into the repo directory. All
 subsequent steps run from this directory.
 
 #### Step 1.3: Check out the PR
+
+Only runs when a PR URL was provided (skipped when using current branch).
 
 ```bash
 gh pr checkout <pr_number>
