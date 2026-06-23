@@ -1,15 +1,15 @@
 ---
 name: "pr-loop"
-description: "Shepherd a PR to mergeable state: rebase, fix CI, address review comments, resolve threads, and loop until green and approved."
+description: "Shepherd a PR to mergeable state: merge base branch, fix CI, address review comments, resolve threads, and loop until green and approved."
 argument-hint: "<pr-url>"
 ---
 
 # PR Loop — Shepherd a PR to Mergeable State
 
-Takes a GitHub PR URL and works it toward a mergeable state: rebases
-onto the merge base, investigates and fixes CI failures, fetches and
-addresses review comments from collaborators and authorized bots,
-resolves addressed comment threads, and loops until done or idle.
+Takes a GitHub PR URL and works it toward a mergeable state: merges
+the base branch in when behind, investigates and fixes CI failures,
+fetches and addresses review comments from collaborators and authorized
+bots, resolves addressed comment threads, and loops until done or idle.
 
 ## Arguments
 
@@ -36,14 +36,14 @@ Validate format: must match `https://github.com/<owner>/<repo>/pull/<number>`.
 
 #### Step 1.2: Clone or locate the repository
 
+`GIT_DIR` is the directory where repos are kept (defaults to `~/git`).
 Check for the repo in this order:
 
-1. If `GIT_DIR` is set and points to a repo matching `owner/repo`, use it
-2. Check `~/git/<repo>` — if it exists and its remote matches `owner/repo`, use it
-3. Check `~/git/<owner>/<repo>` — same check
-4. Otherwise, clone to `~/git/<repo>`:
+1. Check `$GIT_DIR/<repo>` (or `~/git/<repo>` if `GIT_DIR` is unset)
+   — if it exists and has a remote matching `owner/repo`, use it
+2. Otherwise, clone to `$GIT_DIR/<repo>`:
    ```bash
-   gh repo clone <owner>/<repo> ~/git/<repo>
+   gh repo clone <owner>/<repo> $GIT_DIR/<repo>
    ```
 
 After locating or cloning, `cd` into the repo directory. All
@@ -55,7 +55,7 @@ subsequent steps run from this directory.
 gh pr checkout <pr_number>
 ```
 
-If this fails (e.g., no push access), stop and tell the user.
+If this fails, stop and report the error to the user.
 
 #### Step 1.4: Record the start time
 
@@ -87,9 +87,8 @@ branch in (do NOT rebase — never force-push):
 git merge origin/$BASE_REF
 ```
 
-If the merge has conflicts, attempt to resolve them. If conflicts
-cannot be resolved automatically, stop and report the conflicts to
-the user with the specific files and conflict markers.
+If the merge has conflicts, resolve them. Read both sides of each
+conflict, understand the intent, and produce the correct merge.
 
 After a successful merge, push:
 
@@ -99,7 +98,12 @@ git push
 
 ### Phase 3 — CI Check
 
-#### Step 3.1: Check CI status
+#### Step 3.1: Wait for CI to register
+
+If you just pushed, wait 60 seconds before checking CI status to
+allow GitHub to register the new commit and trigger checks.
+
+#### Step 3.2: Check CI status
 
 ```bash
 gh pr view <pr_number> --repo <owner>/<repo> --json statusCheckRollup
@@ -110,7 +114,7 @@ statuses (Prow, Jenkins, etc.) in a single call. Each item has a
 `__typename` of `CheckRun` or `StatusContext` — check the `status`/
 `conclusion` (CheckRun) or `state` (StatusContext) fields.
 
-#### Step 3.2: Handle CI results
+#### Step 3.3: Handle CI results
 
 **If all checks pass**: proceed to Phase 4.
 
@@ -130,21 +134,10 @@ For each failed check:
    - Read the relevant source files
    - Check if the failing test exercises code you modified
    - Check transitive dependencies
-4. **Never assume a failure is pre-existing.** If you believe it
-   is, verify by checking if the same test fails on the base branch:
-   ```bash
-   git stash
-   git checkout origin/$BASE_REF
-   # run the specific failing test
-   git checkout -
-   git stash pop
-   ```
+4. **Never assume a failure is pre-existing.** Even if it is,
+   fix it anyway — leave the codebase better than you found it.
 5. Fix the root cause, commit, and push
 6. Re-run CI check after pushing
-
-If a failure is genuinely pre-existing (verified on base branch),
-document it and offer to fix it (Boy Scout Rule). If the fix is
-out of scope, note it for the user and continue.
 
 ### Phase 4 — Fetch Review Comments
 
@@ -154,43 +147,9 @@ out of scope, note it for the user and continue.
 python3 <skill-dir>/fetch_comments.py <owner>/<repo> <pr_number>
 ```
 
-Parse the JSON output. The structure:
-
-```json
-{
-  "pr": "<owner>/<repo>#<number>",
-  "unresolved_threads": [
-    {
-      "thread_id": "PRRT_...",
-      "thread_node_id": "...",
-      "resolved": false,
-      "comments": [
-        {
-          "id": 12345,
-          "node_id": "...",
-          "author": "reviewer-login",
-          "author_association": "COLLABORATOR",
-          "body": "comment text",
-          "path": "src/file.py",
-          "line": 42,
-          "created_at": "2026-...",
-          "url": "https://..."
-        }
-      ]
-    }
-  ],
-  "issue_comments": [
-    {
-      "id": 12345,
-      "node_id": "...",
-      "author": "coderabbitai[bot]",
-      "body": "comment text",
-      "created_at": "2026-...",
-      "url": "https://..."
-    }
-  ]
-}
-```
+The script returns JSON with `unresolved_threads` (inline review
+comments, already filtered to unresolved only) and `issue_comments`
+(top-level PR comments) from trusted reviewers and authorized bots.
 
 #### Step 4.2: Filter for actionable comments
 
@@ -253,7 +212,12 @@ For each review thread that was addressed, resolve it using the
 GraphQL API:
 
 ```bash
-bash <skill-dir>/resolve_comments.sh <thread_node_id>
+gh api graphql -f query='
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread { id isResolved }
+  }
+}' -f threadId="<thread_node_id>"
 ```
 
 Only resolve threads where you made the requested change or
@@ -265,7 +229,7 @@ After completing Phases 2-5, evaluate whether to loop or stop.
 
 **Terminate when ALL of these are true:**
 
-1. **All CI checks pass** — re-run `check_ci.sh` and confirm
+1. **All CI checks pass** — re-check `statusCheckRollup` and confirm
 2. **All review comments addressed** — re-run `fetch_comments.py`
    and confirm no new unresolved threads from trusted reviewers
 3. **PR is up to date with merge base** — re-check Phase 2
@@ -319,7 +283,6 @@ Outstanding items:
 - **`gh` not authenticated**: stop and tell user to run `gh auth login`
 - **No push access**: stop — user needs to ensure they can push to
   the PR's head branch
-- **Rebase conflicts**: report conflicts with file names and stop
 - **Rate limiting**: back off and retry with exponential delay
 - **CI check URL inaccessible**: note it and continue with other checks
 
